@@ -1,0 +1,46 @@
+# ============================================================
+# OpenClaw Dashboard — docker-compose.yml für Coolify
+# ============================================================
+#
+# Deployment in Coolify:
+#   1. Neues Projekt → "Docker Compose" → GitHub Repo URL
+#   2. Environment Variables in Coolify setzen (siehe .env.example)
+#   3. Deploy → Coolify klont das Repo, baut das Image, startet
+#
+# OpenClaw läuft bereits als eigener Coolify-Service?
+#   → Setze OPENCLAW_NETWORK_NAME auf das Netzwerk deines
+#     OpenClaw-Containers (findest du mit: docker network ls)
+#   → Setze OPENCLAW_HOST auf den Container-Namen
+# ============================================================
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclaw-dashboard
+    restart: unless-stopped
+    environment:
+      # ── Verbindung zum OpenClaw Gateway (internes Netzwerk) ──
+      - OPENCLAW_GATEWAY_URL=ws://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
+      - OPENCLAW_GATEWAY_HTTP=http://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      # ── Dashboard Auth ──
+      - DASHBOARD_SECRET=${DASHBOARD_SECRET}
+      - DASHBOARD_PORT=3200
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-480}
+    ports:
+      - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
+    networks:
+      - openclaw-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  openclaw-net:
+    # Verbindet sich mit dem existierenden OpenClaw-Netzwerk
+    external: true
+    name: ${OPENCLAW_NETWORK_NAME:-coolify_default}

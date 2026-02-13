@@ -1,0 +1,41 @@
+# ============================================================
+# OpenClaw Dashboard — docker-compose mit Pre-Built Image
+# ============================================================
+# Verwendet das fertige Image von GitHub Container Registry.
+# Kein lokaler Build nötig — Coolify pullt einfach das Image.
+#
+# Coolify Setup:
+#   1. Neues Projekt → "Docker Compose"
+#   2. Dieses File einfügen (oder aus Repo)
+#   3. Environment Variables setzen
+#   4. Deploy
+# ============================================================
+
+services:
+  dashboard:
+    # Pre-built Image von GHCR (wird durch GitHub Actions gebaut)
+    # Ersetze <user> durch deinen GitHub Username
+    image: ghcr.io/<user>/openclaw-dashboard:latest
+    container_name: openclaw-dashboard
+    restart: unless-stopped
+    environment:
+      - OPENCLAW_GATEWAY_URL=ws://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
+      - OPENCLAW_GATEWAY_HTTP=http://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - DASHBOARD_SECRET=${DASHBOARD_SECRET}
+      - DASHBOARD_PORT=3200
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-480}
+    ports:
+      - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
+    networks:
+      - openclaw-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  openclaw-net:
+    external: true
+    name: ${OPENCLAW_NETWORK_NAME:-coolify_default}
