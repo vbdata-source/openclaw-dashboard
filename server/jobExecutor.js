@@ -338,13 +338,8 @@ class JobExecutor {
   summarizeResult(result) {
     if (!result) return "Abgeschlossen (kein Ergebnis)";
     
-    const text = typeof result === "string" ? result : JSON.stringify(result);
-    
-    // Erste 1000 Zeichen als Zusammenfassung (für Modal-Ansicht)
-    if (text.length > 1000) {
-      return text.slice(0, 997) + "...";
-    }
-    return text;
+    // Vollständiges Ergebnis zurückgeben - Modal kann scrollen
+    return typeof result === "string" ? result : JSON.stringify(result);
   }
 
   handleAgentEvent(payload) {
