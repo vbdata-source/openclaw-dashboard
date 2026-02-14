@@ -1742,13 +1742,16 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                   className="oc-input oc-select" 
                   value={form.deliverChannel} 
                   onChange={(e) => setForm({ ...form, deliverChannel: e.target.value })}
-                  style={{ width: 140 }}
+                  style={{ width: 150 }}
                 >
-                  <option value="telegram">Telegram</option>
-                  <option value="discord">Discord</option>
-                  <option value="slack">Slack</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="signal">Signal</option>
+                  <option value="telegram">✈️ Telegram</option>
+                  <option value="msteams">🏢 Teams</option>
+                  <option value="discord">🎮 Discord</option>
+                  <option value="slack">💼 Slack</option>
+                  <option value="whatsapp">📱 WhatsApp</option>
+                  <option value="signal">🔒 Signal</option>
+                  <option value="googlechat">💬 Google Chat</option>
+                  <option value="imessage">🍎 iMessage</option>
                 </select>
               )}
             </div>
