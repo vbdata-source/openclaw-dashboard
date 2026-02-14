@@ -31,6 +31,8 @@ services:
       - SESSION_TIMEOUT=${SESSION_TIMEOUT:-480}
     ports:
       - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
+    volumes:
+      - dashboard-data:/app/server/data
     networks:
       - openclaw-net
     healthcheck:
@@ -38,6 +40,11 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+volumes:
+  dashboard-data:
+    # Persistente Speicherung für Jobs
+    name: openclaw-dashboard-data
 
 networks:
   openclaw-net:
