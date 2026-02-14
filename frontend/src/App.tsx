@@ -14,6 +14,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -201,6 +202,21 @@ function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete }: {
   );
 }
 
+// ── Droppable Lane Wrapper ────────────────────────────────
+function DroppableLane({ id, children, isHighlighted }: { id: string; children: React.ReactNode; isHighlighted?: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  
+  return (
+    <div
+      ref={setNodeRef}
+      className={`oc-lane-body ${isOver || isHighlighted ? "oc-lane-body--over" : ""}`}
+      data-lane={id}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ── Job Card Overlay (während Drag) ───────────────────────
 function JobCardOverlay({ job }: { job: Job }) {
   return (
@@ -226,14 +242,15 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [form, setForm] = useState({ title: "", description: "", priority: "medium" as JobPriority, status: "backlog" as JobStatus });
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [overLane, setOverLane] = useState<JobStatus | null>(null);
 
   // Sensors für Mouse, Touch und Keyboard
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
+      activationConstraint: { delay: 150, tolerance: 5 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -247,66 +264,60 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
     setShowAdd(false);
   };
 
+  // Hilfsfunktion: Finde Lane für eine ID
+  const findLaneForId = (id: string): JobStatus | null => {
+    const laneKeys = LANES.map((l) => l.key);
+    if (laneKeys.includes(id as JobStatus)) {
+      return id as JobStatus;
+    }
+    const job = jobs.find((j) => j.id === id);
+    return job?.status || null;
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-    setExpanded(null); // Schließe expandierte Karten beim Drag
+    const id = event.active.id as string;
+    setActiveId(id);
+    setExpanded(null);
+    console.log("[DnD] Start:", id);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeJob = jobs.find((j) => j.id === active.id);
-    if (!activeJob) return;
-
-    // Bestimme Ziel-Lane
-    const overId = over.id as string;
-    let targetLane: JobStatus | null = null;
-
-    // Prüfe ob über einer Lane
-    const laneKeys = LANES.map((l) => l.key);
-    if (laneKeys.includes(overId as JobStatus)) {
-      targetLane = overId as JobStatus;
-    } else {
-      // Über einer anderen Karte - finde deren Lane
-      const overJob = jobs.find((j) => j.id === overId);
-      if (overJob) {
-        targetLane = overJob.status;
-      }
+    const { over } = event;
+    if (!over) {
+      setOverLane(null);
+      return;
     }
-
-    // Optimistic Update während Drag
-    if (targetLane && targetLane !== activeJob.status) {
-      onMove(activeJob.id, targetLane);
-    }
+    const lane = findLaneForId(over.id as string);
+    setOverLane(lane);
+    console.log("[DnD] Over:", over.id, "→ Lane:", lane);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const draggedId = active.id as string;
+    
+    console.log("[DnD] End:", draggedId, "over:", over?.id);
+    
     setActiveId(null);
+    setOverLane(null);
 
     if (!over) return;
 
-    const activeJob = jobs.find((j) => j.id === active.id);
+    const targetLane = findLaneForId(over.id as string);
+    if (!targetLane) return;
+
+    const activeJob = jobs.find((j) => j.id === draggedId);
     if (!activeJob) return;
 
-    // Finale Lane-Zuordnung
-    const overId = over.id as string;
-    const laneKeys = LANES.map((l) => l.key);
-    
-    let targetLane: JobStatus = activeJob.status;
-    if (laneKeys.includes(overId as JobStatus)) {
-      targetLane = overId as JobStatus;
-    } else {
-      const overJob = jobs.find((j) => j.id === overId);
-      if (overJob) {
-        targetLane = overJob.status;
-      }
-    }
-
     if (targetLane !== activeJob.status) {
-      onMove(activeJob.id, targetLane);
+      console.log("[DnD] Moving", draggedId, "from", activeJob.status, "to", targetLane);
+      onMove(draggedId, targetLane);
     }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setOverLane(null);
   };
 
   const activeJob = activeId ? jobs.find((j) => j.id === activeId) : null;
@@ -340,6 +351,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="oc-lanes">
           {LANES.map((lane) => {
@@ -356,7 +368,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
                   strategy={verticalListSortingStrategy}
                   id={lane.key}
                 >
-                  <div className="oc-lane-body" data-lane={lane.key}>
+                  <DroppableLane id={lane.key} isHighlighted={overLane === lane.key && activeId !== null}>
                     {laneJobs.length === 0 && <div className="oc-empty">Keine Jobs</div>}
                     {laneJobs.map((job) => (
                       <SortableJobCard
@@ -368,7 +380,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
                         onDelete={onDelete}
                       />
                     ))}
-                  </div>
+                  </DroppableLane>
                 </SortableContext>
               </div>
             );
@@ -1017,12 +1029,28 @@ export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("chat");
 
-  // Echte Daten (leer initialisiert)
-  const [jobs, setJobs] = useState<Job[]>([]);
+  // Echte Daten (leer initialisiert, Jobs aus LocalStorage laden)
+  const [jobs, setJobs] = useState<Job[]>(() => {
+    try {
+      const saved = localStorage.getItem("oc-dashboard-jobs");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [memory, setMemory] = useState<MemoryEntry[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [cfg, setCfg] = useState<any>({});
   const [dataLoading, setDataLoading] = useState(false);
+
+  // Jobs in LocalStorage speichern bei Änderungen
+  useEffect(() => {
+    try {
+      localStorage.setItem("oc-dashboard-jobs", JSON.stringify(jobs));
+    } catch (err) {
+      console.warn("[App] Jobs speichern fehlgeschlagen:", err);
+    }
+  }, [jobs]);
 
   // Session Detail State
   const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null);

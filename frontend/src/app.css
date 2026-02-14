@@ -79,7 +79,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-lane-head{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:2px solid;font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2)}
 .oc-lane-label{flex:1}
 .oc-lane-count{font-size:10px;color:#fff;padding:1px 7px;border-radius:10px;font-weight:700}
-.oc-lane-body{padding:6px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:80px;border-radius:var(--r);transition:background .15s}
+.oc-lane-body{padding:6px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:80px;border-radius:var(--r);transition:background .15s,border .15s;border:2px solid transparent}
+.oc-lane-body--over{background:rgba(59,130,246,0.1);border:2px dashed var(--ac)}
 .oc-lane-body:empty::after{content:"Hierher ziehen";display:flex;align-items:center;justify-content:center;height:60px;border:2px dashed var(--bd);border-radius:var(--r);color:var(--txd);font-size:12px}
 .oc-card{background:var(--s2);border:1px solid var(--bds);border-radius:var(--r);padding:9px 11px;cursor:grab;transition:all .12s;touch-action:none}
 .oc-card--dragging{opacity:.5;cursor:grabbing;border-color:var(--ac);box-shadow:0 0 0 2px var(--acg)}
