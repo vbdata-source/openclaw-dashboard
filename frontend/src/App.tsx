@@ -599,12 +599,191 @@ function mapStatusToMemory(status: any, config: any): MemoryEntry[] {
   return entries;
 }
 
+// ── Chat View ─────────────────────────────────────────────
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: number;
+  pending?: boolean;
+}
+
+function ChatView({ request, events }: { 
+  request: (method: string, params: any) => Promise<any>;
+  events: GatewayEvent[];
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sessionKey, setSessionKey] = useState("agent:main:webchat:dashboard");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Listen for chat events
+  useEffect(() => {
+    const latest = events[0];
+    if (!latest) return;
+    
+    // Handle chat response events
+    if (latest.type === "chat" || latest.event?.startsWith("chat")) {
+      const payload = latest.payload || latest;
+      
+      // Streaming text
+      if (payload.delta || payload.text) {
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg?.pending && lastMsg.role === "assistant") {
+            return [...prev.slice(0, -1), {
+              ...lastMsg,
+              content: lastMsg.content + (payload.delta || payload.text || ""),
+            }];
+          }
+          return prev;
+        });
+      }
+      
+      // Completion
+      if (payload.done || payload.finished || latest.event === "chat.done") {
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg?.pending) {
+            return [...prev.slice(0, -1), { ...lastMsg, pending: false }];
+          }
+          return prev;
+        });
+        setSending(false);
+      }
+    }
+  }, [events]);
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+
+    const userMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: "user",
+      content: text,
+      timestamp: Date.now(),
+    };
+
+    const assistantMsg: ChatMessage = {
+      id: `msg-${Date.now()}-response`,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      pending: true,
+    };
+
+    setMessages(prev => [...prev, userMsg, assistantMsg]);
+    setInput("");
+    setSending(true);
+
+    try {
+      await request("chat.send", {
+        sessionKey,
+        message: text,
+        idempotencyKey: `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        deliver: false, // Don't deliver to external channels
+      });
+    } catch (err: any) {
+      console.error("[Chat] Send error:", err);
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg?.pending) {
+          return [...prev.slice(0, -1), {
+            ...lastMsg,
+            content: `❌ Fehler: ${err.message}`,
+            pending: false,
+          }];
+        }
+        return prev;
+      });
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return (
+    <div className="oc-chat-view">
+      <div className="oc-chat-header">
+        <div className="oc-chat-title">
+          <span className="oc-chat-icon">💬</span>
+          <div>
+            <h2>Live Chat</h2>
+            <span className="oc-chat-session">Session: {sessionKey}</span>
+          </div>
+        </div>
+        <div className="oc-chat-status">
+          {sending && <span className="oc-chat-typing">🤖 Schreibt...</span>}
+        </div>
+      </div>
+      
+      <div className="oc-chat-messages">
+        {messages.length === 0 && (
+          <div className="oc-chat-welcome">
+            <div className="oc-chat-welcome-icon">🦞</div>
+            <h3>Willkommen im Live Chat!</h3>
+            <p>Schreibe eine Nachricht um mit dem Agent zu sprechen.</p>
+          </div>
+        )}
+        {messages.map((msg) => (
+          <div key={msg.id} className={`oc-chat-bubble oc-chat-bubble--${msg.role} ${msg.pending ? "oc-chat-bubble--pending" : ""}`}>
+            <div className="oc-chat-bubble-role">
+              {msg.role === "user" ? "👤 Du" : msg.role === "assistant" ? "🤖 Agent" : "⚙️ System"}
+            </div>
+            <div className="oc-chat-bubble-content">
+              {msg.content || (msg.pending ? "..." : "")}
+              {msg.pending && <span className="oc-chat-cursor">▊</span>}
+            </div>
+            <div className="oc-chat-bubble-time">
+              {new Date(msg.timestamp).toLocaleTimeString("de-AT")}
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+      
+      <div className="oc-chat-input-area">
+        <textarea
+          ref={inputRef}
+          className="oc-chat-input"
+          placeholder="Nachricht eingeben... (Enter zum Senden)"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={sending}
+          rows={1}
+        />
+        <button 
+          className="oc-chat-send" 
+          onClick={handleSend}
+          disabled={!input.trim() || sending}
+        >
+          {sending ? "⏳" : "➤"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "memory" | "sessions" | "config";
+type View = "kanban" | "memory" | "sessions" | "chat" | "config";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
-  const [view, setView] = useState<View>("sessions");
+  const [view, setView] = useState<View>("chat");
 
   // Echte Daten (leer initialisiert)
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -788,9 +967,10 @@ export default function App() {
   const activeSess = sessions.filter((s) => s.status === "active").length;
 
   const TABS: { key: View; label: string; icon: string; badge?: number }[] = [
+    { key: "chat", label: "Chat", icon: "💬" },
+    { key: "sessions", label: "Sessions", icon: "⚡", badge: activeSess || undefined },
     { key: "kanban", label: "Jobs", icon: "▦", badge: running || undefined },
     { key: "memory", label: "Memory", icon: "◉" },
-    { key: "sessions", label: "Sessions", icon: "⚡", badge: activeSess || undefined },
     { key: "config", label: "Config", icon: "⚙" },
   ];
 
@@ -817,6 +997,7 @@ export default function App() {
         ))}
       </nav>
       <main className="oc-main">
+        {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} loading={dataLoading} />}
         {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
         {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
