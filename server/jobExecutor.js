@@ -249,8 +249,9 @@ class JobExecutor {
     const response = await this.request("chat.send", {
       sessionKey: `agent:main:dashboard:job:${job.id}`,
       message: taskMessage,
-      waitForReply: true,
-      timeoutSeconds: 300, // 5 Minuten max
+      idempotencyKey: `job-${job.id}-${Date.now()}`,
+      timeoutMs: 300000, // 5 Minuten max
+      deliver: false, // Nicht an externe Channels senden
     }, 330000);
 
     return response?.reply || response?.message || response;
