@@ -373,11 +373,8 @@ server.on("upgrade", (request, socket, head) => {
     return;
   }
 
-  // Auth prüfen (Token als Query-Param oder Cookie)
-  const url = new URL(request.url, `http://${request.headers.host}`);
-  const token =
-    url.searchParams.get("token") ||
-    parseCookies(request.headers.cookie || "").oc_session;
+  // Auth prüfen (nur Cookie - kein Token in URL aus Sicherheitsgründen)
+  const token = parseCookies(request.headers.cookie || "").oc_session;
 
   if (!token || !verifyToken(token)) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

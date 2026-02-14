@@ -292,8 +292,56 @@ function MemoryEditor({ entries, onUpdate, onAdd, onDelete, loading }: {
   );
 }
 
+// ── Session Detail Panel ──────────────────────────────────
+interface SessionPreviewItem {
+  role: "user" | "assistant" | "system";
+  text: string;
+  ts?: number;
+}
+
+function SessionDetailPanel({ session, preview, loading, onClose }: {
+  session: SessionEntry;
+  preview: SessionPreviewItem[];
+  loading: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="oc-detail-panel">
+      <div className="oc-detail-header">
+        <div className="oc-detail-title">
+          <span className="oc-detail-icon">💬</span>
+          <div>
+            <h3>{session.sender}</h3>
+            <span className="oc-detail-sub">{session.channel} • {session.id}</span>
+          </div>
+        </div>
+        <button className="oc-detail-close" onClick={onClose}>✕</button>
+      </div>
+      <div className="oc-detail-content">
+        {loading && <div className="oc-empty">Lade Verlauf...</div>}
+        {!loading && preview.length === 0 && <div className="oc-empty">Keine Nachrichten</div>}
+        {!loading && preview.map((msg, i) => (
+          <div key={i} className={`oc-chat-msg oc-chat-msg--${msg.role}`}>
+            <div className="oc-chat-role">{msg.role === "user" ? "👤 User" : msg.role === "assistant" ? "🤖 Assistant" : "⚙️ System"}</div>
+            <div className="oc-chat-text">{msg.text}</div>
+            {msg.ts && <div className="oc-chat-ts">{new Date(msg.ts).toLocaleString("de-AT")}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Session Monitor ───────────────────────────────────────
-function SessionMonitor({ sessions, events, loading }: { sessions: SessionEntry[]; events: GatewayEvent[]; loading?: boolean }) {
+function SessionMonitor({ sessions, events, loading, onSelectSession, selectedSession, sessionPreview, previewLoading }: {
+  sessions: SessionEntry[];
+  events: GatewayEvent[];
+  loading?: boolean;
+  onSelectSession: (session: SessionEntry | null) => void;
+  selectedSession: SessionEntry | null;
+  sessionPreview: SessionPreviewItem[];
+  previewLoading: boolean;
+}) {
   const total = sessions.reduce((s, x) => s + x.tokens, 0);
   const msgs = sessions.reduce((s, x) => s + x.messages, 0);
   const active = sessions.filter((s) => s.status === "active").length;
@@ -301,6 +349,7 @@ function SessionMonitor({ sessions, events, loading }: { sessions: SessionEntry[
     whatsapp: { icon: "📱", color: "#25D366" }, telegram: { icon: "✈️", color: "#0088cc" },
     webchat: { icon: "🌐", color: "#6366f1" }, discord: { icon: "🎮", color: "#5865F2" },
     slack: { icon: "💼", color: "#4A154B" }, signal: { icon: "🔒", color: "#3A76F0" },
+    msteams: { icon: "🏢", color: "#6264A7" },
   };
   const ST: Record<string, { label: string; color: string; bg: string }> = {
     active: { label: "Aktiv", color: "#22c55e", bg: "rgba(34,197,94,0.15)" },
@@ -309,48 +358,64 @@ function SessionMonitor({ sessions, events, loading }: { sessions: SessionEntry[
   };
 
   return (
-    <div>
-      <div className="oc-section-header">
-        <h2 className="oc-view-title">Live Sessions {loading && <span className="oc-loading-sm">⏳</span>}</h2>
-        <span className="oc-live-badge"><span className="oc-pulse" /> {active} aktiv</span>
-      </div>
-      <div className="oc-stats-row">
-        <div className="oc-stat-card"><span className="oc-stat-icon">💬</span><div><span className="oc-stat-num">{msgs}</span><span className="oc-stat-lbl">Nachrichten</span></div></div>
-        <div className="oc-stat-card"><span className="oc-stat-icon">🪙</span><div><span className="oc-stat-num">{(total / 1000).toFixed(1)}k</span><span className="oc-stat-lbl">Tokens</span></div></div>
-        <div className="oc-stat-card"><span className="oc-stat-icon">📡</span><div><span className="oc-stat-num">{new Set(sessions.map((s) => s.channel)).size}</span><span className="oc-stat-lbl">Kanäle</span></div></div>
-        <div className="oc-stat-card"><span className="oc-stat-icon">🤖</span><div><span className="oc-stat-num">{sessions.length}</span><span className="oc-stat-lbl">Sessions</span></div></div>
-      </div>
-      <div className="oc-session-list">
-        {sessions.sort((a, b) => ({ active: 0, idle: 1, completed: 2 }[a.status] ?? 3) - ({ active: 0, idle: 1, completed: 2 }[b.status] ?? 3)).map((s) => {
-          const ch = CH[s.channel] || { icon: "📨", color: "#888" };
-          const st = ST[s.status] || ST.idle;
-          const pct = Math.min((s.tokens / 20000) * 100, 100);
-          return (
-            <div key={s.id} className={`oc-sess-card ${s.status === "active" ? "oc-sess-card--active" : ""}`}>
-              <span className="oc-sess-ch" style={{ background: ch.color + "22", color: ch.color }}>{ch.icon}</span>
-              <div className="oc-sess-info">
-                <div className="oc-sess-row1"><span className="oc-sess-sender">{s.sender}</span><span className="oc-sess-status" style={{ color: st.color, background: st.bg }}>{s.status === "active" && <span className="oc-pulse-sm" />}{st.label}</span></div>
-                <div className="oc-sess-row2"><span>{s.channel}</span><span>•</span><span>{s.messages} msg</span><span>•</span><span>{(s.tokens / 1000).toFixed(1)}k tok</span></div>
+    <div className="oc-sessions-layout">
+      <div className={`oc-sessions-main ${selectedSession ? "oc-sessions-main--narrow" : ""}`}>
+        <div className="oc-section-header">
+          <h2 className="oc-view-title">Live Sessions {loading && <span className="oc-loading-sm">⏳</span>}</h2>
+          <span className="oc-live-badge"><span className="oc-pulse" /> {active} aktiv</span>
+        </div>
+        <div className="oc-stats-row">
+          <div className="oc-stat-card"><span className="oc-stat-icon">💬</span><div><span className="oc-stat-num">{msgs}</span><span className="oc-stat-lbl">Nachrichten</span></div></div>
+          <div className="oc-stat-card"><span className="oc-stat-icon">🪙</span><div><span className="oc-stat-num">{(total / 1000).toFixed(1)}k</span><span className="oc-stat-lbl">Tokens</span></div></div>
+          <div className="oc-stat-card"><span className="oc-stat-icon">📡</span><div><span className="oc-stat-num">{new Set(sessions.map((s) => s.channel)).size}</span><span className="oc-stat-lbl">Kanäle</span></div></div>
+          <div className="oc-stat-card"><span className="oc-stat-icon">🤖</span><div><span className="oc-stat-num">{sessions.length}</span><span className="oc-stat-lbl">Sessions</span></div></div>
+        </div>
+        <div className="oc-session-list">
+          {sessions.sort((a, b) => ({ active: 0, idle: 1, completed: 2 }[a.status] ?? 3) - ({ active: 0, idle: 1, completed: 2 }[b.status] ?? 3)).map((s) => {
+            const ch = CH[s.channel] || { icon: "📨", color: "#888" };
+            const st = ST[s.status] || ST.idle;
+            const pct = Math.min((s.tokens / 20000) * 100, 100);
+            const isSelected = selectedSession?.id === s.id;
+            return (
+              <div
+                key={s.id}
+                className={`oc-sess-card ${s.status === "active" ? "oc-sess-card--active" : ""} ${isSelected ? "oc-sess-card--selected" : ""}`}
+                onClick={() => onSelectSession(isSelected ? null : s)}
+                style={{ cursor: "pointer" }}
+              >
+                <span className="oc-sess-ch" style={{ background: ch.color + "22", color: ch.color }}>{ch.icon}</span>
+                <div className="oc-sess-info">
+                  <div className="oc-sess-row1"><span className="oc-sess-sender">{s.sender}</span><span className="oc-sess-status" style={{ color: st.color, background: st.bg }}>{s.status === "active" && <span className="oc-pulse-sm" />}{st.label}</span></div>
+                  <div className="oc-sess-row2"><span>{s.channel}</span><span>•</span><span>{s.messages} msg</span><span>•</span><span>{(s.tokens / 1000).toFixed(1)}k tok</span></div>
+                </div>
+                <div className="oc-sess-bar-wrap"><div className="oc-sess-bar"><div className="oc-sess-fill" style={{ width: `${pct}%`, background: pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22c55e" }} /></div></div>
               </div>
-              <div className="oc-sess-bar-wrap"><div className="oc-sess-bar"><div className="oc-sess-fill" style={{ width: `${pct}%`, background: pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22c55e" }} /></div></div>
-            </div>
-          );
-        })}
-        {sessions.length === 0 && <div className="oc-empty">{loading ? "Lade Sessions..." : "Keine Sessions"}</div>}
-      </div>
-      <div className="oc-log-box">
-        <h3 className="oc-log-head">Event Log</h3>
-        <div className="oc-log-scroll">
-          {events.slice(0, 50).map((ev, i) => (
-            <div key={i} className={`oc-log-row oc-log-row--${ev.level || "info"}`}>
-              <span className="oc-log-ts">{new Date(ev.timestamp || Date.now()).toLocaleTimeString("de-AT")}</span>
-              <span className={`oc-log-lvl oc-log-lvl--${ev.level || "info"}`}>{ev.level || ev.event || ev.type?.split(":")[0] || "info"}</span>
-              <span className="oc-log-msg">{ev.message || ev.event || JSON.stringify(ev).slice(0, 120)}</span>
-            </div>
-          ))}
-          {events.length === 0 && <div className="oc-empty">Warte auf Events...</div>}
+            );
+          })}
+          {sessions.length === 0 && <div className="oc-empty">{loading ? "Lade Sessions..." : "Keine Sessions"}</div>}
+        </div>
+        <div className="oc-log-box">
+          <h3 className="oc-log-head">Event Log</h3>
+          <div className="oc-log-scroll">
+            {events.slice(0, 50).map((ev, i) => (
+              <div key={i} className={`oc-log-row oc-log-row--${ev.level || "info"}`}>
+                <span className="oc-log-ts">{new Date(ev.timestamp || Date.now()).toLocaleTimeString("de-AT")}</span>
+                <span className={`oc-log-lvl oc-log-lvl--${ev.level || "info"}`}>{ev.level || ev.event || ev.type?.split(":")[0] || "info"}</span>
+                <span className="oc-log-msg">{ev.message || ev.event || JSON.stringify(ev).slice(0, 120)}</span>
+              </div>
+            ))}
+            {events.length === 0 && <div className="oc-empty">Warte auf Events...</div>}
+          </div>
         </div>
       </div>
+      {selectedSession && (
+        <SessionDetailPanel
+          session={selectedSession}
+          preview={sessionPreview}
+          loading={previewLoading}
+          onClose={() => onSelectSession(null)}
+        />
+      )}
     </div>
   );
 }
@@ -548,9 +613,43 @@ export default function App() {
   const [cfg, setCfg] = useState<any>({});
   const [dataLoading, setDataLoading] = useState(false);
 
+  // Session Detail State
+  const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null);
+  const [sessionPreview, setSessionPreview] = useState<SessionPreviewItem[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const { status: wsStatus, events: wsEvents, connect: wsConnect, request: gwRequest } = useGateway({
     autoConnect: authed === true,
   });
+
+  // Session Preview laden
+  const handleSelectSession = useCallback(async (session: SessionEntry | null) => {
+    setSelectedSession(session);
+    setSessionPreview([]);
+    
+    if (!session) return;
+    
+    setPreviewLoading(true);
+    try {
+      const res = await gwRequest("sessions.preview", { 
+        keys: [session.id], 
+        limit: 50,
+        maxChars: 500 
+      });
+      const preview = res?.previews?.[0];
+      if (preview?.items) {
+        setSessionPreview(preview.items.map((item: any) => ({
+          role: item.role || "user",
+          text: item.text || item.content || "",
+          ts: item.ts || item.timestamp,
+        })));
+      }
+    } catch (err) {
+      console.error("[App] Session preview error:", err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [gwRequest]);
 
   // Auth check on mount
   useEffect(() => {
@@ -720,7 +819,7 @@ export default function App() {
       <main className="oc-main">
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} loading={dataLoading} />}
         {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
-        {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} />}
+        {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
       </main>
     </div>
