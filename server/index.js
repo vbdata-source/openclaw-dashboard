@@ -40,6 +40,9 @@ if (config.dashboardSecret === "change-me-in-production") {
 const app = express();
 const server = createServer(app);
 
+// Trust Proxy (Traefik/Coolify Reverse Proxy)
+app.set("trust proxy", 1);
+
 // Security Headers
 app.use(
   helmet({
@@ -414,6 +417,14 @@ wss.on("connection", (clientWs, request) => {
       method: "connect",
       id: `dashboard-${Date.now()}`,
       params: {
+        minProtocol: 3,
+        maxProtocol: 3,
+        client: {
+          id: "openclaw-control-ui",
+          version: "1.0.0",
+          platform: "linux",
+          mode: "webchat",
+        },
         role: "operator",
         scopes: [
           "operator.status",
