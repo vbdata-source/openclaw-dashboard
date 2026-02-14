@@ -325,3 +325,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-load-full-btn{background:var(--ac);color:white;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:8px}
 .oc-load-full-btn:hover{filter:brightness(1.1)}
 .oc-result-info{font-size:11px;color:var(--txd);margin-top:8px;padding:4px 8px;background:rgba(34,197,94,0.1);border-radius:4px;display:inline-block}
+
+/* Pending/Rückfrage Section */
+.oc-pending-section{background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:16px}
+.oc-pending-hint{color:var(--txd);font-size:13px;margin:0 0 12px 0}
+.oc-context-input{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:12px;color:var(--tx);font-size:14px;resize:vertical;min-height:80px;font-family:inherit}
+.oc-context-input:focus{outline:none;border-color:var(--ac)}
+.oc-context-input::placeholder{color:var(--txd)}
+.oc-continue-btn{margin-top:12px;background:#a855f7;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s}
+.oc-continue-btn:hover:not(:disabled){filter:brightness(1.1)}
+.oc-continue-btn:disabled{opacity:0.5;cursor:not-allowed}

@@ -28,7 +28,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // ── Types ─────────────────────────────────────────────────
-export type JobStatus = "backlog" | "queued" | "running" | "done" | "failed";
+export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed";
 export type JobPriority = "low" | "medium" | "high" | "critical";
 
 export interface JobHistoryEntry {
@@ -127,6 +127,7 @@ const LANES: { key: JobStatus; label: string; color: string; icon: string }[] = 
   { key: "backlog", label: "Backlog", color: "#64748b", icon: "📋" },
   { key: "queued", label: "Warteschlange", color: "#f59e0b", icon: "⏳" },
   { key: "running", label: "Ausführung", color: "#3b82f6", icon: "⚡" },
+  { key: "pending", label: "Rückfrage", color: "#a855f7", icon: "❓" },
   { key: "done", label: "Erledigt", color: "#22c55e", icon: "✅" },
   { key: "failed", label: "Fehlgeschlagen", color: "#ef4444", icon: "❌" },
 ];
@@ -234,14 +235,17 @@ function DroppableLane({ id, children, isHighlighted }: { id: string; children: 
 }
 
 // ── Job Detail Modal ──────────────────────────────────────
-function JobDetailModal({ job, onClose, onMove, onDelete }: {
+function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext }: {
   job: Job;
   onClose: () => void;
   onMove: (id: string, s: JobStatus) => void;
   onDelete: (id: string) => void;
+  onAddContext?: (id: string, context: string) => void;
 }) {
   const [fullResult, setFullResult] = useState<string | null>(null);
   const [loadingResult, setLoadingResult] = useState(false);
+  const [additionalContext, setAdditionalContext] = useState("");
+  const [submittingContext, setSubmittingContext] = useState(false);
 
   // Vollständiges Ergebnis automatisch laden wenn URL vorhanden
   useEffect(() => {
@@ -308,6 +312,40 @@ function JobDetailModal({ job, onClose, onMove, onDelete }: {
             </div>
           )}
 
+          {/* Rückfrage - Kontext ergänzen */}
+          {job.status === "pending" && (
+            <div className="oc-modal-section oc-pending-section">
+              <h3>❓ Rückfrage - Kontext ergänzen</h3>
+              <p className="oc-pending-hint">Der Agent braucht weitere Informationen. Ergänze den Kontext und sende den Job erneut.</p>
+              <textarea 
+                className="oc-context-input"
+                placeholder="Zusätzliche Informationen eingeben..."
+                value={additionalContext}
+                onChange={(e) => setAdditionalContext(e.target.value)}
+                rows={4}
+              />
+              <button 
+                className="oc-continue-btn"
+                disabled={!additionalContext.trim() || submittingContext}
+                onClick={async () => {
+                  if (!additionalContext.trim() || !onAddContext) return;
+                  setSubmittingContext(true);
+                  try {
+                    await onAddContext(job.id, additionalContext.trim());
+                    setAdditionalContext("");
+                    onClose();
+                  } catch (err) {
+                    console.error("Failed to add context:", err);
+                  } finally {
+                    setSubmittingContext(false);
+                  }
+                }}
+              >
+                {submittingContext ? "⏳ Wird gesendet..." : "🚀 Mit Kontext fortsetzen"}
+              </button>
+            </div>
+          )}
+
           {/* Fehler */}
           {job.error && (
             <div className="oc-modal-section">
@@ -371,11 +409,12 @@ function JobCardOverlay({ job }: { job: Job }) {
 }
 
 // ── Kanban Board mit Drag & Drop ──────────────────────────
-function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
+function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, loading }: {
   jobs: Job[];
   onMove: (id: string, s: JobStatus) => void;
   onAdd: (j: Omit<Job, "id" | "createdAt" | "updatedAt" | "history">) => void;
   onDelete: (id: string) => void;
+  onAddContext: (id: string, context: string) => void;
   loading?: boolean;
 }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -566,6 +605,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
           onClose={() => setSelectedJob(null)}
           onMove={onMove}
           onDelete={onDelete}
+          onAddContext={onAddContext}
         />
       )}
     </div>
@@ -1436,6 +1476,27 @@ export default function App() {
     }
   }, []);
 
+  const addContextToJob = useCallback(async (id: string, context: string) => {
+    try {
+      // Aktualisiere Job-Beschreibung mit zusätzlichem Kontext
+      const job = jobs.find(j => j.id === id);
+      if (!job) return;
+      
+      const updatedDescription = `${job.description}\n\n---\n**Zusätzlicher Kontext:**\n${context}`;
+      
+      // Job aktualisieren und in Warteschlange verschieben
+      await api.jobs.update(id, { 
+        description: updatedDescription,
+        status: "queued" 
+      });
+      
+      console.log("[App] Context added to job:", id);
+    } catch (err: any) {
+      console.error("[App] Failed to add context:", err.message);
+      throw err;
+    }
+  }, [jobs]);
+
   const updMem = useCallback((id: string, v: string) => setMemory((p) => p.map((m) => (m.id === id ? { ...m, value: v, updatedAt: new Date().toISOString() } : m))), []);
 
   const addMem = useCallback((e: Omit<MemoryEntry, "id" | "updatedAt">) => setMemory((p) => [...p, { ...e, id: `m${Date.now()}`, updatedAt: new Date().toISOString() }]), []);
@@ -1480,7 +1541,7 @@ export default function App() {
       </nav>
       <main className="oc-main">
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
-        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} loading={dataLoading} />}
+        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} loading={dataLoading} />}
         {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
         {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}

@@ -56,6 +56,7 @@ export const JobStatus = {
   BACKLOG: "backlog",
   QUEUED: "queued",
   RUNNING: "running",
+  PENDING: "pending",
   DONE: "done",
   FAILED: "failed",
 };
