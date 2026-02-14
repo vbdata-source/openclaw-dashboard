@@ -13,6 +13,7 @@ class JobExecutor {
     this.ws = null;
     this.connected = false;
     this.pendingRequests = new Map(); // id → { resolve, reject, timeout }
+    this.jobResultHandlers = new Map(); // idempotencyKey → { onText, onComplete, onError }
     this.currentJob = null;
     this.checkInterval = null;
     this.reconnectTimeout = null;
@@ -160,8 +161,36 @@ class JobExecutor {
     }
 
     // Event für laufenden Job (Agent Stream)
-    if (msg.type === "event" && msg.event === "agent" && this.currentJob) {
+    if (msg.type === "event" && msg.event === "agent") {
       this.handleAgentEvent(msg.payload);
+    }
+
+    // Chat Event (finale Antwort)
+    if (msg.type === "event" && msg.event === "chat") {
+      this.handleChatEvent(msg.payload);
+    }
+  }
+
+  handleChatEvent(payload) {
+    if (!payload) return;
+    
+    // Finde den passenden Handler anhand der Session
+    for (const [key, handler] of this.jobResultHandlers) {
+      if (payload.state === "final" && payload.message?.content) {
+        const content = payload.message.content;
+        const text = Array.isArray(content)
+          ? content.map(c => c.text || "").join("")
+          : (typeof content === "string" ? content : JSON.stringify(content));
+        
+        console.log(`[JobExecutor] Chat final received, text length: ${text.length}`);
+        handler.onComplete(text);
+        return;
+      }
+      
+      if (payload.state === "error") {
+        handler.onError(payload.errorMessage || "Agent error");
+        return;
+      }
     }
   }
 
@@ -242,19 +271,52 @@ class JobExecutor {
   async runAgentTask(job) {
     // Task-Nachricht zusammenbauen
     const taskMessage = this.buildTaskMessage(job);
+    const idempotencyKey = `job-${job.id}-${Date.now()}`;
 
     console.log(`[JobExecutor] Sending task to agent: ${taskMessage.slice(0, 100)}...`);
 
-    // Chat.send an Gateway - führt Agent-Turn aus
-    const response = await this.request("chat.send", {
-      sessionKey: `agent:main:dashboard:job:${job.id}`,
-      message: taskMessage,
-      idempotencyKey: `job-${job.id}-${Date.now()}`,
-      timeoutMs: 300000, // 5 Minuten max
-      deliver: false, // Nicht an externe Channels senden
-    }, 330000);
+    // Promise für das Ergebnis
+    return new Promise((resolve, reject) => {
+      let result = "";
+      let timeoutHandle = null;
+      
+      // Timeout nach 5 Minuten
+      timeoutHandle = setTimeout(() => {
+        this.jobResultHandlers.delete(idempotencyKey);
+        reject(new Error("Job timeout - keine Antwort vom Agent nach 5 Minuten"));
+      }, 300000);
 
-    return response?.reply || response?.message || response;
+      // Handler für Agent-Events registrieren
+      this.jobResultHandlers.set(idempotencyKey, {
+        onText: (text) => {
+          result = text; // Akkumuliere Text
+        },
+        onComplete: (finalText) => {
+          clearTimeout(timeoutHandle);
+          this.jobResultHandlers.delete(idempotencyKey);
+          resolve(finalText || result || "Job abgeschlossen (keine Textantwort)");
+        },
+        onError: (error) => {
+          clearTimeout(timeoutHandle);
+          this.jobResultHandlers.delete(idempotencyKey);
+          reject(new Error(error));
+        },
+      });
+
+      // Chat.send an Gateway
+      this.send({
+        type: "req",
+        method: "chat.send",
+        id: idempotencyKey,
+        params: {
+          sessionKey: `agent:main:dashboard:job:${job.id}`,
+          message: taskMessage,
+          idempotencyKey: idempotencyKey,
+          timeoutMs: 300000,
+          deliver: false,
+        },
+      });
+    });
   }
 
   buildTaskMessage(job) {
@@ -286,10 +348,32 @@ class JobExecutor {
   }
 
   handleAgentEvent(payload) {
-    // Optional: Live-Updates während Job-Ausführung
-    // Könnte für Progress-Anzeige genutzt werden
-    if (payload?.stream === "assistant" && payload?.data?.text) {
-      // Agent schreibt gerade...
+    if (!payload) return;
+    
+    // Text-Stream vom Agent
+    if (payload.stream === "assistant" && payload.data?.text) {
+      // Finde passenden Handler und sende Text-Update
+      for (const [key, handler] of this.jobResultHandlers) {
+        handler.onText(payload.data.text);
+      }
+    }
+    
+    // Lifecycle Events
+    if (payload.stream === "lifecycle") {
+      const phase = payload.data?.phase;
+      
+      if (phase === "end") {
+        // Agent fertig - warte auf chat.final Event
+        console.log("[JobExecutor] Agent lifecycle: end");
+      }
+      
+      if (phase === "error") {
+        const error = payload.data?.error || "Unknown agent error";
+        console.log(`[JobExecutor] Agent lifecycle: error - ${error}`);
+        for (const [key, handler] of this.jobResultHandlers) {
+          handler.onError(error);
+        }
+      }
     }
   }
 }
