@@ -258,6 +258,46 @@ app.post("/internal/jobs", express.json(), (req, res) => {
   }
 });
 
+// Update job (für Status-Änderungen etc.)
+app.put("/internal/jobs/:id", express.json(), (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    const job = jobStore.update(id, updates);
+    if (!job) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    
+    broadcastJobEvent("job.updated", job);
+    console.log(`[Internal API] Job updated: ${id} - status: ${job.status}`);
+    res.json(job);
+  } catch (err) {
+    console.error("[Internal API] Error updating job:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete job
+app.delete("/internal/jobs/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const job = jobStore.get(id);
+    
+    if (!job) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    
+    jobStore.delete(id);
+    broadcastJobEvent("job.deleted", job);
+    console.log(`[Internal API] Job deleted: ${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[Internal API] Error deleting job:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Gateway Proxy Helpers ─────────────────────────────────
 async function gatewayFetch(path, options = {}) {
   const url = `${config.gatewayHttp}${path}`;
