@@ -25,9 +25,10 @@ services:
       - OPENCLAW_GATEWAY_URL=ws://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
       - OPENCLAW_GATEWAY_HTTP=http://${OPENCLAW_HOST:-openclaw}:${OPENCLAW_PORT:-18789}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-      # ── Workspace API (für Memory-Dateien) ──
+      # ── Workspace Dateien (lokales Volume oder API) ──
       - WORKSPACE_API_URL=${WORKSPACE_API_URL:-}
       - WORKSPACE_API_TOKEN=${WORKSPACE_API_TOKEN:-${OPENCLAW_GATEWAY_TOKEN}}
+      - OPENCLAW_WORKSPACE=/openclaw-workspace/workspace
       # ── Dashboard Auth ──
       - DASHBOARD_SECRET=${DASHBOARD_SECRET}
       - DASHBOARD_PORT=3200
@@ -36,6 +37,7 @@ services:
       - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
     volumes:
       - dashboard-data:/app/data
+      - ${OPENCLAW_DATA_VOLUME:-openclaw-data}:/openclaw-workspace:ro
     networks:
       - openclaw-net
     healthcheck:
