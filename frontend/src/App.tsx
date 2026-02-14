@@ -1595,30 +1595,37 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       // Erst versuchen über cron.run
       const result = await request("cron.run", { jobId: id });
       
-      // Wenn "not-due", dann manuell über Wake-Event ausführen
+      // Wenn "not-due", dann Schedule temporär auf "jetzt" setzen
       if (result?.ran === false && result?.reason === "not-due") {
-        console.log("[Cron] Job not due, executing via wake event...");
+        console.log("[Cron] Job not due, triggering via temporary schedule change...");
         
-        const message = job.payload.message || job.payload.text || "";
+        // Alten Schedule speichern
+        const originalSchedule = { ...job.schedule };
         
-        // Wake-Event an den Agent senden der dann die Aktion ausführt
-        let wakeText: string;
-        
-        if (job.payload.deliver && job.payload.channel) {
-          // Agent soll Nachricht an Channel senden
-          wakeText = `[CRON-TEST] Sende diese Nachricht an ${job.payload.channel}: "🧪 ${message}"`;
-        } else if (job.payload.kind === "systemEvent") {
-          wakeText = message;
-        } else {
-          wakeText = `[Cron Test] ${message}`;
-        }
-        
-        await request("cron.wake", { 
-          text: wakeText,
-          mode: "now" 
+        // Schedule auf "in 2 Sekunden" setzen
+        const triggerTime = Date.now() + 2000;
+        await request("cron.update", { 
+          jobId: id, 
+          patch: { 
+            schedule: { kind: "at", atMs: triggerTime } 
+          } 
         });
         
-        alert("✅ Test wurde an Agent gesendet!");
+        alert("⏳ Job wird in 2 Sekunden ausgeführt...");
+        
+        // Nach 5 Sekunden den Original-Schedule wiederherstellen
+        setTimeout(async () => {
+          try {
+            await request("cron.update", { 
+              jobId: id, 
+              patch: { schedule: originalSchedule } 
+            });
+            console.log("[Cron] Original schedule restored");
+            loadCronJobs();
+          } catch (err) {
+            console.error("[Cron] Failed to restore schedule:", err);
+          }
+        }, 5000);
       } else {
         alert("✅ Job wurde ausgelöst!");
       }
