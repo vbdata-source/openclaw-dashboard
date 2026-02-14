@@ -188,6 +188,12 @@ class JobStore {
         job.finishedAt = now;
       }
       
+      // Clear error when restarting job
+      if (updates.status === JobStatus.QUEUED || updates.status === JobStatus.RUNNING) {
+        job.error = null;
+        job.finishedAt = null;
+      }
+      
       // Queue management
       if (updates.status === JobStatus.QUEUED && oldStatus !== JobStatus.QUEUED) {
         this._addToQueue(job);
