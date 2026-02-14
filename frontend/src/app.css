@@ -295,3 +295,30 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
   .oc-add-row{flex-direction:column}
   .oc-add-row>*{width:100%}
 }
+
+/* ── Job Detail Modal ───────────────────────────────────── */
+.oc-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.oc-modal{background:var(--bg2);border-radius:12px;max-width:700px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+.oc-modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:20px;border-bottom:1px solid var(--bd)}
+.oc-modal-title{display:flex;gap:12px;align-items:flex-start}
+.oc-modal-icon{font-size:24px}
+.oc-modal-title h2{margin:0;font-size:18px;color:var(--tx)}
+.oc-modal-status{font-size:12px;opacity:0.7}
+.oc-modal-close{background:none;border:none;color:var(--txd);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px}
+.oc-modal-close:hover{background:var(--bd);color:var(--tx)}
+.oc-modal-content{flex:1;overflow-y:auto;padding:20px}
+.oc-modal-section{margin-bottom:20px}
+.oc-modal-section h3{font-size:13px;color:var(--txd);margin:0 0 8px 0;text-transform:uppercase;letter-spacing:0.5px}
+.oc-modal-task{background:var(--bg);padding:12px;border-radius:8px;color:var(--tx);white-space:pre-wrap;font-size:14px;line-height:1.5}
+.oc-modal-result{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);padding:12px;border-radius:8px;color:var(--tx);white-space:pre-wrap;font-size:14px;line-height:1.6;max-height:300px;overflow-y:auto}
+.oc-modal-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:12px;border-radius:8px;color:#ef4444;font-size:14px}
+.oc-modal-history{display:flex;flex-direction:column;gap:8px}
+.oc-history-entry{display:flex;gap:12px;align-items:center;padding:8px;background:var(--bg);border-radius:6px;font-size:12px}
+.oc-history-time{color:var(--txd);min-width:140px}
+.oc-history-status{color:var(--tx);min-width:100px}
+.oc-history-msg{color:var(--txd);flex:1}
+.oc-modal-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--txd)}
+.oc-modal-meta code{background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px}
+.oc-modal-actions{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-top:1px solid var(--bd);gap:12px}
+.oc-detail-btn{background:var(--ac);color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;margin-bottom:8px;width:100%}
+.oc-detail-btn:hover{filter:brightness(1.1)}

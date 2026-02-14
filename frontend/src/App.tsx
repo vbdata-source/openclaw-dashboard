@@ -156,12 +156,13 @@ function timeAgo(d: string): string {
 
 // ── Kanban Board ──────────────────────────────────────────
 // ── Sortable Job Card ─────────────────────────────────────
-function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete }: {
+function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete, onOpenDetail }: {
   job: Job;
   expanded: string | null;
   setExpanded: (id: string | null) => void;
   onMove: (id: string, s: JobStatus) => void;
   onDelete: (id: string) => void;
+  onOpenDetail: (job: Job) => void;
 }) {
   const {
     attributes,
@@ -204,6 +205,7 @@ function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete }: {
       {job.resultUrl && <a href={job.resultUrl} target="_blank" rel="noopener" className="oc-result-link" onClick={(e) => e.stopPropagation()}>📄 Ergebnis ansehen</a>}
       {expanded === job.id && (
         <div className="oc-card-actions" onClick={(e) => e.stopPropagation()}>
+          <button className="oc-detail-btn" onClick={() => onOpenDetail(job)}>🔍 Details</button>
           <div className="oc-move-btns">
             {LANES.filter((l) => l.key !== job.status).map((l) => (
               <button key={l.key} className="oc-move-btn" style={{ borderColor: l.color, color: l.color }} onClick={() => onMove(job.id, l.key)}>{l.icon} {l.label}</button>
@@ -231,6 +233,110 @@ function DroppableLane({ id, children, isHighlighted }: { id: string; children: 
   );
 }
 
+// ── Job Detail Modal ──────────────────────────────────────
+function JobDetailModal({ job, onClose, onMove, onDelete }: {
+  job: Job;
+  onClose: () => void;
+  onMove: (id: string, s: JobStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [fullResult, setFullResult] = useState<string | null>(null);
+  const [loadingResult, setLoadingResult] = useState(false);
+
+  // Vollständiges Ergebnis laden
+  useEffect(() => {
+    if (job.resultUrl) {
+      setLoadingResult(true);
+      fetch(job.resultUrl)
+        .then(res => res.text())
+        .then(text => setFullResult(text))
+        .catch(err => setFullResult(`Fehler beim Laden: ${err.message}`))
+        .finally(() => setLoadingResult(false));
+    }
+  }, [job.resultUrl]);
+
+  const statusInfo = LANES.find(l => l.key === job.status);
+
+  return (
+    <div className="oc-modal-overlay" onClick={onClose}>
+      <div className="oc-modal" onClick={e => e.stopPropagation()}>
+        <div className="oc-modal-header">
+          <div className="oc-modal-title">
+            <span className="oc-modal-icon">{statusInfo?.icon || "📋"}</span>
+            <div>
+              <h2>{job.title}</h2>
+              <span className="oc-modal-status" style={{ color: statusInfo?.color }}>{statusInfo?.label}</span>
+            </div>
+          </div>
+          <button className="oc-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="oc-modal-content">
+          {/* Beschreibung / Task */}
+          <div className="oc-modal-section">
+            <h3>📝 Aufgabe</h3>
+            <div className="oc-modal-task">{job.description || "(Keine Beschreibung)"}</div>
+          </div>
+
+          {/* Ergebnis */}
+          {(job.result || fullResult) && (
+            <div className="oc-modal-section">
+              <h3>✅ Ergebnis</h3>
+              <div className="oc-modal-result">
+                {loadingResult ? "Lade..." : (fullResult || job.result)}
+              </div>
+            </div>
+          )}
+
+          {/* Fehler */}
+          {job.error && (
+            <div className="oc-modal-section">
+              <h3>❌ Fehler</h3>
+              <div className="oc-modal-error">{job.error}</div>
+            </div>
+          )}
+
+          {/* Historie */}
+          {job.history && job.history.length > 0 && (
+            <div className="oc-modal-section">
+              <h3>📜 Verlauf</h3>
+              <div className="oc-modal-history">
+                {job.history.map((entry, i) => (
+                  <div key={i} className="oc-history-entry">
+                    <span className="oc-history-time">{new Date(entry.timestamp).toLocaleString("de-AT")}</span>
+                    <span className="oc-history-status">{LANES.find(l => l.key === entry.status)?.icon} {entry.status}</span>
+                    {entry.message && <span className="oc-history-msg">{entry.message}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Meta-Info */}
+          <div className="oc-modal-section oc-modal-meta">
+            <div><strong>ID:</strong> <code>{job.id}</code></div>
+            <div><strong>Erstellt:</strong> {new Date(job.createdAt).toLocaleString("de-AT")}</div>
+            <div><strong>Aktualisiert:</strong> {new Date(job.updatedAt).toLocaleString("de-AT")}</div>
+            {job.finishedAt && <div><strong>Abgeschlossen:</strong> {new Date(job.finishedAt).toLocaleString("de-AT")}</div>}
+            <div><strong>Priorität:</strong> <span style={{ color: PRIO[job.priority].color }}>{PRIO[job.priority].label}</span></div>
+          </div>
+        </div>
+
+        <div className="oc-modal-actions">
+          <div className="oc-move-btns">
+            {LANES.filter(l => l.key !== job.status).map(l => (
+              <button key={l.key} className="oc-move-btn" style={{ borderColor: l.color, color: l.color }} onClick={() => { onMove(job.id, l.key); onClose(); }}>
+                {l.icon} {l.label}
+              </button>
+            ))}
+          </div>
+          <button className="oc-del-btn" onClick={() => { onDelete(job.id); onClose(); }}>🗑️ Löschen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Job Card Overlay (während Drag) ───────────────────────
 function JobCardOverlay({ job }: { job: Job }) {
   return (
@@ -254,6 +360,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [form, setForm] = useState({ 
     title: "", 
     description: "", 
@@ -417,6 +524,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
                         setExpanded={setExpanded}
                         onMove={onMove}
                         onDelete={onDelete}
+                        onOpenDetail={setSelectedJob}
                       />
                     ))}
                   </DroppableLane>
@@ -430,6 +538,16 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
           {activeJob ? <JobCardOverlay job={activeJob} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Job Detail Modal */}
+      {selectedJob && (
+        <JobDetailModal
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          onMove={onMove}
+          onDelete={onDelete}
+        />
+      )}
     </div>
   );
 }
