@@ -31,11 +31,10 @@ COPY server/ ./
 COPY --from=frontend /build/dist ./public
 
 # Non-root User + Data-Verzeichnis mit korrekten Permissions
-RUN addgroup -g 1001 -S dash && \
-    adduser -u 1001 -S dash -G dash && \
-    mkdir -p /app/data/results && \
-    chown -R dash:dash /app
-USER dash
+# uid=1000 für Kompatibilität mit OpenClaw workspace (node:node)
+RUN mkdir -p /app/data/results && \
+    chown -R node:node /app
+USER node
 
 ENV NODE_ENV=production
 EXPOSE 3200
