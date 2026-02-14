@@ -322,3 +322,6 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-modal-actions{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-top:1px solid var(--bd);gap:12px}
 .oc-detail-btn{background:var(--ac);color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;margin-bottom:8px;width:100%}
 .oc-detail-btn:hover{filter:brightness(1.1)}
+.oc-load-full-btn{background:var(--ac);color:white;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:8px}
+.oc-load-full-btn:hover{filter:brightness(1.1)}
+.oc-result-info{font-size:11px;color:var(--txd);margin-top:8px;padding:4px 8px;background:rgba(34,197,94,0.1);border-radius:4px;display:inline-block}

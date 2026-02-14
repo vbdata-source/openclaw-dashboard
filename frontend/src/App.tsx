@@ -243,14 +243,24 @@ function JobDetailModal({ job, onClose, onMove, onDelete }: {
   const [fullResult, setFullResult] = useState<string | null>(null);
   const [loadingResult, setLoadingResult] = useState(false);
 
-  // Vollständiges Ergebnis laden
+  // Vollständiges Ergebnis automatisch laden wenn URL vorhanden
   useEffect(() => {
-    if (job.resultUrl) {
+    if (job.resultUrl && !fullResult) {
       setLoadingResult(true);
+      console.log("[Modal] Loading full result from:", job.resultUrl);
       fetch(job.resultUrl)
-        .then(res => res.text())
-        .then(text => setFullResult(text))
-        .catch(err => setFullResult(`Fehler beim Laden: ${err.message}`))
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        })
+        .then(text => {
+          console.log("[Modal] Full result loaded:", text.length, "chars");
+          setFullResult(text);
+        })
+        .catch(err => {
+          console.error("[Modal] Failed to load result:", err);
+          setFullResult(null);
+        })
         .finally(() => setLoadingResult(false));
     }
   }, [job.resultUrl]);
@@ -279,12 +289,22 @@ function JobDetailModal({ job, onClose, onMove, onDelete }: {
           </div>
 
           {/* Ergebnis */}
-          {(job.result || fullResult) && (
+          {(job.result || fullResult || job.resultUrl) && (
             <div className="oc-modal-section">
-              <h3>✅ Ergebnis</h3>
+              <h3>✅ Ergebnis {job.resultUrl && !fullResult && !loadingResult && <button className="oc-load-full-btn" onClick={() => {
+                setLoadingResult(true);
+                fetch(job.resultUrl!)
+                  .then(res => res.text())
+                  .then(text => setFullResult(text))
+                  .catch(err => setFullResult(`Fehler: ${err.message}`))
+                  .finally(() => setLoadingResult(false));
+              }}>📄 Vollständig laden</button>}</h3>
               <div className="oc-modal-result">
-                {loadingResult ? "Lade..." : (fullResult || job.result)}
+                {loadingResult ? "⏳ Lade vollständiges Ergebnis..." : (fullResult || job.result || "(Kein Ergebnis)")}
               </div>
+              {fullResult && fullResult !== job.result && (
+                <div className="oc-result-info">✅ Vollständiges Ergebnis geladen ({fullResult.length} Zeichen)</div>
+              )}
             </div>
           )}
 
