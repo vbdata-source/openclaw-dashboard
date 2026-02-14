@@ -28,7 +28,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // ── Types ─────────────────────────────────────────────────
-export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed";
+export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
 export type JobPriority = "low" | "medium" | "high" | "critical";
 
 export interface JobHistoryEntry {
@@ -138,6 +138,9 @@ const LANES: { key: JobStatus; label: string; color: string; icon: string }[] = 
   { key: "done", label: "Erledigt", color: "#22c55e", icon: "✅" },
   { key: "failed", label: "Fehlgeschlagen", color: "#ef4444", icon: "❌" },
 ];
+
+// Archiv ist separat (nicht im Haupt-Board)
+const ARCHIVE_LANE = { key: "archived" as JobStatus, label: "Archiv", color: "#475569", icon: "📦" };
 
 const PRIO: Record<JobPriority, { label: string; color: string; bg: string }> = {
   low: { label: "Niedrig", color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
@@ -483,6 +486,26 @@ function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext, onUpdate
               </button>
             ))}
           </div>
+          {/* Archivieren für done/failed Jobs */}
+          {(job.status === "done" || job.status === "failed") && (
+            <button 
+              className="oc-archive-btn" 
+              style={{ borderColor: ARCHIVE_LANE.color, color: ARCHIVE_LANE.color }}
+              onClick={() => { onMove(job.id, "archived"); onClose(); }}
+            >
+              {ARCHIVE_LANE.icon} Archivieren
+            </button>
+          )}
+          {/* Wiederherstellen für archivierte Jobs */}
+          {job.status === "archived" && (
+            <button 
+              className="oc-restore-btn" 
+              style={{ borderColor: "#22c55e", color: "#22c55e" }}
+              onClick={() => { onMove(job.id, "done"); onClose(); }}
+            >
+              ♻️ Wiederherstellen
+            </button>
+          )}
           <button className="oc-del-btn" onClick={() => { onDelete(job.id); onClose(); }}>🗑️ Löschen</button>
         </div>
       </div>
@@ -514,6 +537,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
   loading?: boolean;
 }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [form, setForm] = useState({ 
@@ -525,6 +549,10 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
   });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overLane, setOverLane] = useState<JobStatus | null>(null);
+  
+  // Jobs filtern: aktive vs archivierte
+  const activeJobs = jobs.filter(j => j.status !== "archived");
+  const archivedJobs = jobs.filter(j => j.status === "archived");
 
   // Sensors für Mouse, Touch und Keyboard
   const sensors = useSensors(
@@ -552,8 +580,8 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
 
   // Hilfsfunktion: Finde Lane für eine ID
   const findLaneForId = (id: string): JobStatus | null => {
-    const laneKeys = LANES.map((l) => l.key);
-    if (laneKeys.includes(id as JobStatus)) {
+    const allLaneKeys = [...LANES.map((l) => l.key), ARCHIVE_LANE.key];
+    if (allLaneKeys.includes(id as JobStatus)) {
       return id as JobStatus;
     }
     const job = jobs.find((j) => j.id === id);
@@ -612,7 +640,15 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
     <div className="oc-kanban">
       <div className="oc-section-header">
         <h2 className="oc-view-title">Job Board {loading && <span className="oc-loading-sm">⏳</span>}</h2>
-        <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Neuer Job</button>
+        <div className="oc-header-actions">
+          <button 
+            className={`oc-archive-toggle ${showArchive ? "oc-archive-toggle--active" : ""}`}
+            onClick={() => setShowArchive(!showArchive)}
+          >
+            📦 Archiv {archivedJobs.length > 0 && <span className="oc-archive-count">{archivedJobs.length}</span>}
+          </button>
+          <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Neuer Job</button>
+        </div>
       </div>
       {showAdd && (
         <div className="oc-add-panel">
@@ -656,7 +692,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
       >
         <div className="oc-lanes">
           {LANES.map((lane) => {
-            const laneJobs = jobs.filter((j) => j.status === lane.key);
+            const laneJobs = activeJobs.filter((j) => j.status === lane.key);
             return (
               <div key={lane.key} className="oc-lane" id={lane.key}>
                 <div className="oc-lane-head" style={{ borderBottomColor: lane.color }}>
@@ -693,6 +729,37 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
           {activeJob ? <JobCardOverlay job={activeJob} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Archiv-Sektion */}
+      {showArchive && (
+        <div className="oc-archive-section">
+          <div className="oc-archive-header">
+            <h3>{ARCHIVE_LANE.icon} {ARCHIVE_LANE.label}</h3>
+            <span className="oc-archive-info">{archivedJobs.length} Job{archivedJobs.length !== 1 ? "s" : ""} archiviert</span>
+          </div>
+          <div className="oc-archive-list">
+            {archivedJobs.length === 0 && (
+              <div className="oc-empty">Keine archivierten Jobs</div>
+            )}
+            {archivedJobs.map((job) => (
+              <div key={job.id} className="oc-archive-card" onClick={() => setSelectedJob(job)}>
+                <div className="oc-archive-card-main">
+                  <span className="oc-archive-card-title">{job.title}</span>
+                  <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
+                </div>
+                <div className="oc-archive-card-meta">
+                  <span>{job.description?.slice(0, 60)}{job.description && job.description.length > 60 ? "..." : ""}</span>
+                  <span className="oc-time">Archiviert {timeAgo(job.updatedAt)}</span>
+                </div>
+                <div className="oc-archive-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button className="oc-restore-btn-sm" onClick={() => onMove(job.id, "done")} title="Wiederherstellen">♻️</button>
+                  <button className="oc-del-btn-sm" onClick={() => onDelete(job.id)} title="Endgültig löschen">🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Job Detail Modal */}
       {selectedJob && (

@@ -59,6 +59,7 @@ export const JobStatus = {
   PENDING: "pending",
   DONE: "done",
   FAILED: "failed",
+  ARCHIVED: "archived",
 };
 
 export const JobPriority = {
