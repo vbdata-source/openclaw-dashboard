@@ -230,6 +230,34 @@ app.get("/api/health", async (req, res) => {
   });
 });
 
+// ── Internal API (no auth - for OpenClaw Agent) ───────────
+app.post("/internal/jobs", express.json(), (req, res) => {
+  try {
+    const { title, description, priority = "medium", agent = "openclaw" } = req.body;
+    
+    if (!title) {
+      return res.status(400).json({ error: "title ist erforderlich" });
+    }
+    
+    const job = jobStore.create({
+      title,
+      description: description || "",
+      priority,
+      status: "backlog",
+      agent,
+    });
+    
+    // WebSocket broadcast
+    broadcastJobEvent("job.created", job);
+    
+    console.log(`[Internal API] Job created: ${job.id} - ${job.title}`);
+    res.status(201).json(job);
+  } catch (err) {
+    console.error("[Internal API] Error creating job:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Gateway Proxy Helpers ─────────────────────────────────
 async function gatewayFetch(path, options = {}) {
   const url = `${config.gatewayHttp}${path}`;
