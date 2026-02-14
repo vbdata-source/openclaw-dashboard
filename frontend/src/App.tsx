@@ -1595,42 +1595,31 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       // Erst versuchen über cron.run
       const result = await request("cron.run", { jobId: id });
       
-      // Wenn "not-due", dann Schedule temporär auf "jetzt" setzen
+      // Wenn "not-due", dann einen neuen einmaligen Test-Job erstellen
       if (result?.ran === false && result?.reason === "not-due") {
-        console.log("[Cron] Job not due, triggering via temporary schedule change...");
+        console.log("[Cron] Job not due, creating one-shot test job...");
         
-        // Alten Schedule speichern
-        const originalSchedule = { ...job.schedule };
+        // Neuen einmaligen Job mit gleichem Payload erstellen
+        const testJob = {
+          name: `🧪 Test: ${job.name || job.id.slice(0, 8)}`,
+          schedule: { 
+            kind: "at" as const, 
+            atMs: Date.now() + 1000 // In 1 Sekunde
+          },
+          payload: job.payload,
+          sessionTarget: job.sessionTarget,
+          enabled: true,
+        };
         
-        // Schedule auf "in 2 Sekunden" setzen
-        const triggerTime = Date.now() + 2000;
-        await request("cron.update", { 
-          jobId: id, 
-          patch: { 
-            schedule: { kind: "at", atMs: triggerTime } 
-          } 
-        });
+        await request("cron.add", { job: testJob });
+        alert("✅ Test-Job erstellt! Wird in 1 Sekunde ausgeführt.");
         
-        alert("⏳ Job wird in 2 Sekunden ausgeführt...");
-        
-        // Nach 5 Sekunden den Original-Schedule wiederherstellen
-        setTimeout(async () => {
-          try {
-            await request("cron.update", { 
-              jobId: id, 
-              patch: { schedule: originalSchedule } 
-            });
-            console.log("[Cron] Original schedule restored");
-            loadCronJobs();
-          } catch (err) {
-            console.error("[Cron] Failed to restore schedule:", err);
-          }
-        }, 5000);
+        // Liste neu laden
+        setTimeout(() => loadCronJobs(), 2000);
       } else {
         alert("✅ Job wurde ausgelöst!");
+        loadCronJobs();
       }
-      
-      loadCronJobs();
     } catch (err: any) {
       console.error("[Cron] Ausführen fehlgeschlagen:", err.message);
       alert("Fehler: " + err.message);
