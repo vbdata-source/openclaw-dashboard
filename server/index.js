@@ -20,6 +20,7 @@ import { readFileSync, existsSync } from "fs";
 import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 import { jobStore, JobStatus } from "./jobStore.js";
+import { createJobExecutor } from "./jobExecutor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -908,24 +909,36 @@ function parseCookies(cookieHeader) {
 }
 
 // ── Start ─────────────────────────────────────────────────
+// Job Executor initialisieren
+const jobExecutor = createJobExecutor({
+  gatewayWs: config.gatewayWs,
+  gatewayToken: config.gatewayToken,
+});
+
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`
 ╔══════════════════════════════════════════════════╗
-║  🦞 OpenClaw Dashboard v1.1.0                   ║
+║  🦞 OpenClaw Dashboard v1.2.0                   ║
 ║                                                  ║
 ║  Dashboard:  http://0.0.0.0:${String(config.port).padEnd(5)}              ║
 ║  Gateway:    ${config.gatewayWs.padEnd(35)} ║
 ║  Auth:       ${!config.dashboardSecret || config.dashboardSecret.startsWith("dev-only") ? "⚠️  DEV MODE (unsicher!)".padEnd(35) : "✅ Konfiguriert".padEnd(35)} ║
 ║  Env:        ${config.nodeEnv.padEnd(35)} ║
 ║  Metrics:    /metrics                            ║
+║  Executor:   ✅ Aktiv                            ║
 ╚══════════════════════════════════════════════════╝
   `);
+
+  // Job Executor starten
+  jobExecutor.start();
 });
 
 // Graceful Shutdown
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
     console.log(`\n[${signal}] Fahre herunter...`);
+    // Job Executor stoppen
+    jobExecutor.stop();
     // Alle Client-Verbindungen schließen (inkl. Gateway-Verbindungen)
     wss.clients.forEach((ws) => {
       ws.close(1001, "Server shutdown");
