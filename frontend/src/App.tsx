@@ -1403,8 +1403,343 @@ function ChatView({ request, events }: {
   );
 }
 
+// ── Cron Job Types ────────────────────────────────────────
+export interface CronJob {
+  id: string;
+  name?: string;
+  schedule: {
+    kind: "at" | "every" | "cron";
+    atMs?: number;
+    everyMs?: number;
+    anchorMs?: number;
+    expr?: string;
+    tz?: string;
+  };
+  payload: {
+    kind: "systemEvent" | "agentTurn";
+    text?: string;
+    message?: string;
+    model?: string;
+    thinking?: string;
+    timeoutSeconds?: number;
+    deliver?: boolean;
+    channel?: string;
+    to?: string;
+  };
+  sessionTarget: "main" | "isolated";
+  enabled: boolean;
+  lastRun?: string;
+  nextRun?: string;
+  runCount?: number;
+}
+
+// ── Cron Manager Component ────────────────────────────────
+function CronManager({ request, loading }: { request: (method: string, params?: any) => Promise<any>; loading?: boolean }) {
+  const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [cronLoading, setCronLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<CronJob | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    scheduleKind: "cron" as "at" | "every" | "cron",
+    cronExpr: "0 9 * * 1", // Montag 9:00
+    everyMs: 3600000, // 1 Stunde
+    atDateTime: "",
+    timezone: "Europe/Vienna",
+    payloadKind: "systemEvent" as "systemEvent" | "agentTurn",
+    text: "",
+    sessionTarget: "main" as "main" | "isolated",
+    enabled: true,
+  });
+
+  // Cron Jobs laden
+  const loadCronJobs = useCallback(async () => {
+    setCronLoading(true);
+    try {
+      const res = await request("cron.list", { includeDisabled: true });
+      const jobs = res?.jobs || res || [];
+      setCronJobs(Array.isArray(jobs) ? jobs : []);
+      console.log("[Cron] Jobs geladen:", jobs.length);
+    } catch (err: any) {
+      console.error("[Cron] Laden fehlgeschlagen:", err.message);
+    } finally {
+      setCronLoading(false);
+    }
+  }, [request]);
+
+  useEffect(() => {
+    loadCronJobs();
+  }, [loadCronJobs]);
+
+  // Job erstellen
+  const handleCreate = async () => {
+    if (!form.text.trim()) return;
+    
+    let schedule: CronJob["schedule"];
+    if (form.scheduleKind === "cron") {
+      schedule = { kind: "cron", expr: form.cronExpr, tz: form.timezone };
+    } else if (form.scheduleKind === "every") {
+      schedule = { kind: "every", everyMs: form.everyMs };
+    } else {
+      schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
+    }
+
+    const job = {
+      name: form.name || undefined,
+      schedule,
+      payload: form.payloadKind === "systemEvent" 
+        ? { kind: "systemEvent" as const, text: form.text }
+        : { kind: "agentTurn" as const, message: form.text },
+      sessionTarget: form.payloadKind === "systemEvent" ? "main" as const : "isolated" as const,
+      enabled: form.enabled,
+    };
+
+    try {
+      await request("cron.add", { job });
+      setForm({ ...form, name: "", text: "" });
+      setShowAdd(false);
+      loadCronJobs();
+    } catch (err: any) {
+      console.error("[Cron] Erstellen fehlgeschlagen:", err.message);
+      alert("Fehler: " + err.message);
+    }
+  };
+
+  // Job löschen
+  const handleDelete = async (id: string) => {
+    if (!confirm("Cron-Job wirklich löschen?")) return;
+    try {
+      await request("cron.remove", { jobId: id });
+      loadCronJobs();
+    } catch (err: any) {
+      console.error("[Cron] Löschen fehlgeschlagen:", err.message);
+    }
+  };
+
+  // Job aktivieren/deaktivieren
+  const handleToggle = async (job: CronJob) => {
+    try {
+      await request("cron.update", { jobId: job.id, patch: { enabled: !job.enabled } });
+      loadCronJobs();
+    } catch (err: any) {
+      console.error("[Cron] Toggle fehlgeschlagen:", err.message);
+    }
+  };
+
+  // Job sofort ausführen
+  const handleRunNow = async (id: string) => {
+    try {
+      await request("cron.run", { jobId: id });
+      alert("Job wurde ausgelöst!");
+      loadCronJobs();
+    } catch (err: any) {
+      console.error("[Cron] Ausführen fehlgeschlagen:", err.message);
+      alert("Fehler: " + err.message);
+    }
+  };
+
+  // Schedule-Beschreibung
+  const describeSchedule = (schedule: CronJob["schedule"]): string => {
+    if (schedule.kind === "cron") {
+      return `Cron: ${schedule.expr}${schedule.tz ? ` (${schedule.tz})` : ""}`;
+    } else if (schedule.kind === "every") {
+      const ms = schedule.everyMs || 0;
+      if (ms >= 86400000) return `Alle ${Math.floor(ms / 86400000)} Tag(e)`;
+      if (ms >= 3600000) return `Alle ${Math.floor(ms / 3600000)} Stunde(n)`;
+      if (ms >= 60000) return `Alle ${Math.floor(ms / 60000)} Minute(n)`;
+      return `Alle ${ms}ms`;
+    } else if (schedule.kind === "at") {
+      return `Einmalig: ${new Date(schedule.atMs || 0).toLocaleString("de-AT")}`;
+    }
+    return "Unbekannt";
+  };
+
+  // Cron-Presets
+  const CRON_PRESETS = [
+    { label: "Täglich 9:00", value: "0 9 * * *" },
+    { label: "Montags 9:00", value: "0 9 * * 1" },
+    { label: "Stündlich", value: "0 * * * *" },
+    { label: "Alle 30 Min", value: "*/30 * * * *" },
+    { label: "Werktags 8:00", value: "0 8 * * 1-5" },
+  ];
+
+  return (
+    <div className="oc-cron">
+      <div className="oc-section-header">
+        <h2 className="oc-view-title">Cron Jobs {(cronLoading || loading) && <span className="oc-loading-sm">⏳</span>}</h2>
+        <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Neuer Cron-Job</button>
+      </div>
+
+      {/* Add Form */}
+      {showAdd && (
+        <div className="oc-add-panel oc-cron-form">
+          <div className="oc-add-row">
+            <input 
+              className="oc-input" 
+              placeholder="Name (optional)" 
+              value={form.name} 
+              onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              style={{ flex: 1 }}
+            />
+            <select 
+              className="oc-input oc-select" 
+              value={form.scheduleKind} 
+              onChange={(e) => setForm({ ...form, scheduleKind: e.target.value as any })}
+              style={{ width: 140 }}
+            >
+              <option value="cron">⏰ Cron</option>
+              <option value="every">🔄 Intervall</option>
+              <option value="at">📅 Einmalig</option>
+            </select>
+          </div>
+
+          {form.scheduleKind === "cron" && (
+            <div className="oc-add-row">
+              <input 
+                className="oc-input" 
+                placeholder="Cron Expression (z.B. 0 9 * * 1)" 
+                value={form.cronExpr} 
+                onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <select 
+                className="oc-input oc-select" 
+                value="" 
+                onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
+                style={{ width: 160 }}
+              >
+                <option value="">Preset...</option>
+                {CRON_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+          )}
+
+          {form.scheduleKind === "every" && (
+            <div className="oc-add-row">
+              <select 
+                className="oc-input oc-select" 
+                value={form.everyMs} 
+                onChange={(e) => setForm({ ...form, everyMs: parseInt(e.target.value) })}
+              >
+                <option value={300000}>Alle 5 Minuten</option>
+                <option value={900000}>Alle 15 Minuten</option>
+                <option value={1800000}>Alle 30 Minuten</option>
+                <option value={3600000}>Stündlich</option>
+                <option value={7200000}>Alle 2 Stunden</option>
+                <option value={14400000}>Alle 4 Stunden</option>
+                <option value={43200000}>Alle 12 Stunden</option>
+                <option value={86400000}>Täglich</option>
+              </select>
+            </div>
+          )}
+
+          {form.scheduleKind === "at" && (
+            <div className="oc-add-row">
+              <input 
+                type="datetime-local" 
+                className="oc-input" 
+                value={form.atDateTime} 
+                onChange={(e) => setForm({ ...form, atDateTime: e.target.value })}
+                style={{ flex: 1 }}
+              />
+            </div>
+          )}
+
+          <div className="oc-add-row">
+            <select 
+              className="oc-input oc-select" 
+              value={form.payloadKind} 
+              onChange={(e) => setForm({ ...form, payloadKind: e.target.value as any })}
+              style={{ width: 200 }}
+            >
+              <option value="systemEvent">💬 System Event (Main Session)</option>
+              <option value="agentTurn">🤖 Agent Turn (Isoliert)</option>
+            </select>
+            <label className="oc-checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={form.enabled} 
+                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              />
+              Aktiviert
+            </label>
+          </div>
+
+          <textarea 
+            className="oc-input oc-textarea" 
+            placeholder={form.payloadKind === "systemEvent" ? "Event Text (wird in Main Session injiziert)" : "Agent Prompt (wird in isolierter Session ausgeführt)"} 
+            value={form.text} 
+            onChange={(e) => setForm({ ...form, text: e.target.value })} 
+            rows={3}
+          />
+
+          <div className="oc-add-row">
+            <button className="oc-btn-primary" onClick={handleCreate} disabled={!form.text.trim()}>Erstellen</button>
+            <button className="oc-btn-ghost" onClick={() => setShowAdd(false)}>Abbrechen</button>
+          </div>
+        </div>
+      )}
+
+      {/* Job Liste */}
+      <div className="oc-cron-list">
+        {cronJobs.length === 0 && !cronLoading && (
+          <div className="oc-empty">Keine Cron-Jobs konfiguriert</div>
+        )}
+        {cronJobs.map((job) => (
+          <div key={job.id} className={`oc-cron-card ${!job.enabled ? "oc-cron-card--disabled" : ""}`}>
+            <div className="oc-cron-card-main">
+              <div className="oc-cron-card-info">
+                <span className="oc-cron-card-name">{job.name || `Job ${job.id.slice(0, 8)}`}</span>
+                <span className={`oc-cron-status ${job.enabled ? "oc-cron-status--on" : "oc-cron-status--off"}`}>
+                  {job.enabled ? "✓ Aktiv" : "○ Pausiert"}
+                </span>
+              </div>
+              <div className="oc-cron-card-schedule">
+                <span className="oc-cron-schedule-icon">⏰</span>
+                <span>{describeSchedule(job.schedule)}</span>
+              </div>
+              <div className="oc-cron-card-payload">
+                <span className="oc-cron-payload-type">
+                  {job.payload.kind === "systemEvent" ? "💬" : "🤖"} {job.sessionTarget}
+                </span>
+                <span className="oc-cron-payload-text">
+                  {(job.payload.text || job.payload.message || "").slice(0, 60)}
+                  {(job.payload.text || job.payload.message || "").length > 60 ? "..." : ""}
+                </span>
+              </div>
+            </div>
+            <div className="oc-cron-card-meta">
+              {job.lastRun && <span>Zuletzt: {new Date(job.lastRun).toLocaleString("de-AT")}</span>}
+              {job.nextRun && <span>Nächster: {new Date(job.nextRun).toLocaleString("de-AT")}</span>}
+              {job.runCount !== undefined && <span>Ausführungen: {job.runCount}</span>}
+            </div>
+            <div className="oc-cron-card-actions">
+              <button className="oc-cron-btn" onClick={() => handleToggle(job)} title={job.enabled ? "Pausieren" : "Aktivieren"}>
+                {job.enabled ? "⏸️" : "▶️"}
+              </button>
+              <button className="oc-cron-btn" onClick={() => handleRunNow(job.id)} title="Jetzt ausführen">
+                🚀
+              </button>
+              <button className="oc-cron-btn oc-cron-btn--danger" onClick={() => handleDelete(job.id)} title="Löschen">
+                🗑️
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Info Box */}
+      <div className="oc-cron-info">
+        <h4>ℹ️ Cron vs. Dashboard Jobs</h4>
+        <p><strong>Cron Jobs</strong> laufen automatisch nach Zeitplan (wiederkehrend oder einmalig).</p>
+        <p><strong>Dashboard Jobs</strong> sind einmalige Tasks die manuell gestartet werden.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "memory" | "sessions" | "chat" | "config";
+type View = "kanban" | "memory" | "sessions" | "chat" | "config" | "cron";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -1681,6 +2016,7 @@ export default function App() {
     { key: "chat", label: "Chat", icon: "💬" },
     { key: "sessions", label: "Sessions", icon: "⚡", badge: activeSess || undefined },
     { key: "kanban", label: "Jobs", icon: "▦", badge: running || undefined },
+    { key: "cron", label: "Cron", icon: "🔄" },
     { key: "memory", label: "Memory", icon: "◉" },
     { key: "config", label: "Config", icon: "⚙" },
   ];
@@ -1710,6 +2046,7 @@ export default function App() {
       <main className="oc-main">
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
+        {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
         {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
