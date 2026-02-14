@@ -419,3 +419,4 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-cron-info p{margin:4px 0;font-size:12px;color:var(--txd)}
 .oc-checkbox-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tx);cursor:pointer}
 .oc-checkbox-label input[type="checkbox"]{width:16px;height:16px;cursor:pointer}
+.oc-form-title{margin:0 0 12px 0;font-size:14px;color:var(--tx);font-weight:500}

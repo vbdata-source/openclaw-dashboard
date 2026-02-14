@@ -1437,8 +1437,8 @@ export interface CronJob {
 function CronManager({ request, loading }: { request: (method: string, params?: any) => Promise<any>; loading?: boolean }) {
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [cronLoading, setCronLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<CronJob | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [form, setForm] = useState({
     name: "",
     scheduleKind: "cron" as "at" | "every" | "cron",
@@ -1451,6 +1451,47 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     sessionTarget: "main" as "main" | "isolated",
     enabled: true,
   });
+
+  // Form für neuen Job öffnen
+  const openAddForm = () => {
+    setEditingJob(null);
+    setForm({
+      name: "",
+      scheduleKind: "cron",
+      cronExpr: "0 9 * * 1",
+      everyMs: 3600000,
+      atDateTime: "",
+      timezone: "Europe/Vienna",
+      payloadKind: "systemEvent",
+      text: "",
+      sessionTarget: "main",
+      enabled: true,
+    });
+    setShowForm(true);
+  };
+
+  // Form für Edit öffnen
+  const openEditForm = (job: CronJob) => {
+    setEditingJob(job);
+    setForm({
+      name: job.name || "",
+      scheduleKind: job.schedule.kind,
+      cronExpr: job.schedule.expr || "0 9 * * 1",
+      everyMs: job.schedule.everyMs || 3600000,
+      atDateTime: job.schedule.atMs ? new Date(job.schedule.atMs).toISOString().slice(0, 16) : "",
+      timezone: job.schedule.tz || "Europe/Vienna",
+      payloadKind: job.payload.kind,
+      text: job.payload.text || job.payload.message || "",
+      sessionTarget: job.sessionTarget,
+      enabled: job.enabled,
+    });
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingJob(null);
+  };
 
   // Cron Jobs laden
   const loadCronJobs = useCallback(async () => {
@@ -1471,8 +1512,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     loadCronJobs();
   }, [loadCronJobs]);
 
-  // Job erstellen
-  const handleCreate = async () => {
+  // Job erstellen oder aktualisieren
+  const handleSubmit = async () => {
     if (!form.text.trim()) return;
     
     let schedule: CronJob["schedule"];
@@ -1484,7 +1525,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
 
-    const job = {
+    const jobData = {
       name: form.name || undefined,
       schedule,
       payload: form.payloadKind === "systemEvent" 
@@ -1495,12 +1536,19 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     };
 
     try {
-      await request("cron.add", { job });
-      setForm({ ...form, name: "", text: "" });
-      setShowAdd(false);
+      if (editingJob) {
+        // Update existing job
+        await request("cron.update", { jobId: editingJob.id, patch: jobData });
+        console.log("[Cron] Job aktualisiert:", editingJob.id);
+      } else {
+        // Create new job
+        await request("cron.add", { job: jobData });
+        console.log("[Cron] Job erstellt");
+      }
+      closeForm();
       loadCronJobs();
     } catch (err: any) {
-      console.error("[Cron] Erstellen fehlgeschlagen:", err.message);
+      console.error("[Cron] Speichern fehlgeschlagen:", err.message);
       alert("Fehler: " + err.message);
     }
   };
@@ -1567,12 +1615,13 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     <div className="oc-cron">
       <div className="oc-section-header">
         <h2 className="oc-view-title">Cron Jobs {(cronLoading || loading) && <span className="oc-loading-sm">⏳</span>}</h2>
-        <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Neuer Cron-Job</button>
+        <button className="oc-btn-primary" onClick={openAddForm}>+ Neuer Cron-Job</button>
       </div>
 
-      {/* Add Form */}
-      {showAdd && (
+      {/* Add/Edit Form */}
+      {showForm && (
         <div className="oc-add-panel oc-cron-form">
+          <h3 className="oc-form-title">{editingJob ? "✏️ Cron-Job bearbeiten" : "➕ Neuer Cron-Job"}</h3>
           <div className="oc-add-row">
             <input 
               className="oc-input" 
@@ -1674,8 +1723,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
           />
 
           <div className="oc-add-row">
-            <button className="oc-btn-primary" onClick={handleCreate} disabled={!form.text.trim()}>Erstellen</button>
-            <button className="oc-btn-ghost" onClick={() => setShowAdd(false)}>Abbrechen</button>
+            <button className="oc-btn-primary" onClick={handleSubmit} disabled={!form.text.trim()}>
+              {editingJob ? "💾 Speichern" : "Erstellen"}
+            </button>
+            <button className="oc-btn-ghost" onClick={closeForm}>Abbrechen</button>
           </div>
         </div>
       )}
@@ -1714,6 +1765,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               {job.runCount !== undefined && <span>Ausführungen: {job.runCount}</span>}
             </div>
             <div className="oc-cron-card-actions">
+              <button className="oc-cron-btn" onClick={() => openEditForm(job)} title="Bearbeiten">
+                ✏️
+              </button>
               <button className="oc-cron-btn" onClick={() => handleToggle(job)} title={job.enabled ? "Pausieren" : "Aktivieren"}>
                 {job.enabled ? "⏸️" : "▶️"}
               </button>
