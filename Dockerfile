@@ -30,9 +30,10 @@ COPY server/ ./
 # Frontend-Build aus Stage 1 reinkopieren
 COPY --from=frontend /build/dist ./public
 
-# Non-root User
+# Non-root User + Data-Verzeichnis mit korrekten Permissions
 RUN addgroup -g 1001 -S dash && \
     adduser -u 1001 -S dash -G dash && \
+    mkdir -p /app/data && \
     chown -R dash:dash /app
 USER dash
 

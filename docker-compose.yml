@@ -32,7 +32,7 @@ services:
     ports:
       - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
     volumes:
-      - dashboard-data:/app/server/data
+      - dashboard-data:/app/data
     networks:
       - openclaw-net
     healthcheck:
