@@ -162,15 +162,26 @@ class JobExecutor {
 
     // Response für Agent Job (isolierte Session)
     if (msg.type === "res" && msg.id && this.jobResultHandlers.has(msg.id)) {
-      const handler = this.jobResultHandlers.get(msg.id);
       if (msg.ok) {
-        // Extrahiere Text aus Agent-Response
+        // "accepted" Response - warte auf tatsächliches Ergebnis via Events
         const payload = msg.payload || {};
+        if (payload.status === "accepted") {
+          console.log(`[JobExecutor] Agent request accepted, waiting for result events...`);
+          // Speichere runId für Event-Matching
+          const handler = this.jobResultHandlers.get(msg.id);
+          if (handler && payload.runId) {
+            handler.runId = payload.runId;
+          }
+          return; // Warte auf Events
+        }
+        // Direktes Ergebnis (falls es doch kommt)
+        const handler = this.jobResultHandlers.get(msg.id);
         const text = payload.text || payload.content || 
                      (typeof payload === "string" ? payload : JSON.stringify(payload));
-        console.log(`[JobExecutor] Agent response received, text length: ${text?.length || 0}`);
+        console.log(`[JobExecutor] Agent direct response, text length: ${text?.length || 0}`);
         handler.onComplete(text);
       } else {
+        const handler = this.jobResultHandlers.get(msg.id);
         handler.onError(msg.error?.message || "Agent request failed");
       }
       return;
@@ -304,13 +315,21 @@ class JobExecutor {
 
       // Handler für Agent-Events registrieren
       this.jobResultHandlers.set(idempotencyKey, {
+        runId: null, // Wird gesetzt wenn "accepted" kommt
+        accumulatedText: "",
         onText: (text) => {
-          result = text; // Akkumuliere Text
+          // Akkumuliere Text-Chunks
+          const handler = this.jobResultHandlers.get(idempotencyKey);
+          if (handler) {
+            handler.accumulatedText = text; // Letzter vollständiger Text
+          }
         },
         onComplete: (finalText) => {
           clearTimeout(timeoutHandle);
+          const handler = this.jobResultHandlers.get(idempotencyKey);
+          const resultText = finalText || handler?.accumulatedText || result || "Job abgeschlossen (keine Textantwort)";
           this.jobResultHandlers.delete(idempotencyKey);
-          resolve(finalText || result || "Job abgeschlossen (keine Textantwort)");
+          resolve(resultText);
         },
         onError: (error) => {
           clearTimeout(timeoutHandle);
@@ -361,11 +380,23 @@ class JobExecutor {
   handleAgentEvent(payload) {
     if (!payload) return;
     
+    const eventRunId = payload.runId;
+    
+    // Finde passenden Handler basierend auf runId
+    let matchedHandler = null;
+    let matchedKey = null;
+    for (const [key, handler] of this.jobResultHandlers) {
+      if (handler.runId && handler.runId === eventRunId) {
+        matchedHandler = handler;
+        matchedKey = key;
+        break;
+      }
+    }
+    
     // Text-Stream vom Agent
     if (payload.stream === "assistant" && payload.data?.text) {
-      // Finde passenden Handler und sende Text-Update
-      for (const [key, handler] of this.jobResultHandlers) {
-        handler.onText(payload.data.text);
+      if (matchedHandler) {
+        matchedHandler.onText(payload.data.text);
       }
     }
     
@@ -373,16 +404,19 @@ class JobExecutor {
     if (payload.stream === "lifecycle") {
       const phase = payload.data?.phase;
       
-      if (phase === "end") {
-        // Agent fertig - warte auf chat.final Event
-        console.log("[JobExecutor] Agent lifecycle: end");
+      if (phase === "end" && matchedHandler) {
+        // Agent fertig - verwende akkumulierten Text
+        console.log(`[JobExecutor] Agent lifecycle: end for runId ${eventRunId}`);
+        // onComplete wird mit dem bisher akkumulierten Text aufgerufen
+        // Der Text wurde via onText gesammelt
+        matchedHandler.onComplete(matchedHandler.accumulatedText || "Job abgeschlossen");
       }
       
       if (phase === "error") {
         const error = payload.data?.error || "Unknown agent error";
         console.log(`[JobExecutor] Agent lifecycle: error - ${error}`);
-        for (const [key, handler] of this.jobResultHandlers) {
-          handler.onError(error);
+        if (matchedHandler) {
+          matchedHandler.onError(error);
         }
       }
     }
