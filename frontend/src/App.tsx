@@ -5,6 +5,26 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "./lib/api";
 import { useGateway, type GatewayStatus, type GatewayEvent } from "./hooks/useGateway";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "done" | "failed";
@@ -123,6 +143,78 @@ function timeAgo(d: string): string {
 }
 
 // ── Kanban Board ──────────────────────────────────────────
+// ── Sortable Job Card ─────────────────────────────────────
+function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete }: {
+  job: Job;
+  expanded: string | null;
+  setExpanded: (id: string | null) => void;
+  onMove: (id: string, s: JobStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: job.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`oc-card ${isDragging ? "oc-card--dragging" : ""}`}
+      {...attributes}
+      {...listeners}
+      onClick={() => setExpanded(expanded === job.id ? null : job.id)}
+    >
+      <div className="oc-card-top">
+        <span className="oc-card-title">{job.title}</span>
+        <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
+      </div>
+      <p className="oc-card-desc">{job.description}</p>
+      <div className="oc-card-meta">
+        {job.channel && <span className="oc-tag">{job.channel}</span>}
+        {job.estimatedTokens && <span className="oc-tok">~{(job.estimatedTokens / 1000).toFixed(1)}k</span>}
+        <span className="oc-time">{timeAgo(job.updatedAt)}</span>
+      </div>
+      {job.result && <div className={`oc-result ${job.status === "failed" ? "oc-result--err" : ""}`}>{job.result}</div>}
+      {expanded === job.id && (
+        <div className="oc-card-actions" onClick={(e) => e.stopPropagation()}>
+          <div className="oc-move-btns">
+            {LANES.filter((l) => l.key !== job.status).map((l) => (
+              <button key={l.key} className="oc-move-btn" style={{ borderColor: l.color, color: l.color }} onClick={() => onMove(job.id, l.key)}>{l.icon} {l.label}</button>
+            ))}
+          </div>
+          <button className="oc-del-btn" onClick={() => onDelete(job.id)}>Löschen</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Job Card Overlay (während Drag) ───────────────────────
+function JobCardOverlay({ job }: { job: Job }) {
+  return (
+    <div className="oc-card oc-card--overlay">
+      <div className="oc-card-top">
+        <span className="oc-card-title">{job.title}</span>
+        <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
+      </div>
+      <p className="oc-card-desc">{job.description}</p>
+    </div>
+  );
+}
+
+// ── Kanban Board mit Drag & Drop ──────────────────────────
 function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
   jobs: Job[];
   onMove: (id: string, s: JobStatus) => void;
@@ -133,6 +225,20 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [form, setForm] = useState({ title: "", description: "", priority: "medium" as JobPriority, status: "backlog" as JobStatus });
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Sensors für Mouse, Touch und Keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const handleAdd = () => {
     if (!form.title.trim()) return;
@@ -140,6 +246,70 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
     setForm({ title: "", description: "", priority: "medium", status: "backlog" });
     setShowAdd(false);
   };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+    setExpanded(null); // Schließe expandierte Karten beim Drag
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeJob = jobs.find((j) => j.id === active.id);
+    if (!activeJob) return;
+
+    // Bestimme Ziel-Lane
+    const overId = over.id as string;
+    let targetLane: JobStatus | null = null;
+
+    // Prüfe ob über einer Lane
+    const laneKeys = LANES.map((l) => l.key);
+    if (laneKeys.includes(overId as JobStatus)) {
+      targetLane = overId as JobStatus;
+    } else {
+      // Über einer anderen Karte - finde deren Lane
+      const overJob = jobs.find((j) => j.id === overId);
+      if (overJob) {
+        targetLane = overJob.status;
+      }
+    }
+
+    // Optimistic Update während Drag
+    if (targetLane && targetLane !== activeJob.status) {
+      onMove(activeJob.id, targetLane);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const activeJob = jobs.find((j) => j.id === active.id);
+    if (!activeJob) return;
+
+    // Finale Lane-Zuordnung
+    const overId = over.id as string;
+    const laneKeys = LANES.map((l) => l.key);
+    
+    let targetLane: JobStatus = activeJob.status;
+    if (laneKeys.includes(overId as JobStatus)) {
+      targetLane = overId as JobStatus;
+    } else {
+      const overJob = jobs.find((j) => j.id === overId);
+      if (overJob) {
+        targetLane = overJob.status;
+      }
+    }
+
+    if (targetLane !== activeJob.status) {
+      onMove(activeJob.id, targetLane);
+    }
+  };
+
+  const activeJob = activeId ? jobs.find((j) => j.id === activeId) : null;
 
   return (
     <div className="oc-kanban">
@@ -163,48 +333,52 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
           </div>
         </div>
       )}
-      <div className="oc-lanes">
-        {LANES.map((lane) => {
-          const lj = jobs.filter((j) => j.status === lane.key);
-          return (
-            <div key={lane.key} className="oc-lane">
-              <div className="oc-lane-head" style={{ borderBottomColor: lane.color }}>
-                <span>{lane.icon}</span>
-                <span className="oc-lane-label">{lane.label}</span>
-                <span className="oc-lane-count" style={{ background: lane.color }}>{lj.length}</span>
-              </div>
-              <div className="oc-lane-body">
-                {lj.length === 0 && <div className="oc-empty">Keine Jobs</div>}
-                {lj.map((job) => (
-                  <div key={job.id} className="oc-card" onClick={() => setExpanded(expanded === job.id ? null : job.id)}>
-                    <div className="oc-card-top">
-                      <span className="oc-card-title">{job.title}</span>
-                      <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
-                    </div>
-                    <p className="oc-card-desc">{job.description}</p>
-                    <div className="oc-card-meta">
-                      {job.channel && <span className="oc-tag">{job.channel}</span>}
-                      {job.estimatedTokens && <span className="oc-tok">~{(job.estimatedTokens / 1000).toFixed(1)}k</span>}
-                      <span className="oc-time">{timeAgo(job.updatedAt)}</span>
-                    </div>
-                    {job.result && <div className={`oc-result ${job.status === "failed" ? "oc-result--err" : ""}`}>{job.result}</div>}
-                    {expanded === job.id && (
-                      <div className="oc-card-actions" onClick={(e) => e.stopPropagation()}>
-                        <div className="oc-move-btns">
-                          {LANES.filter((l) => l.key !== job.status).map((l) => (
-                            <button key={l.key} className="oc-move-btn" style={{ borderColor: l.color, color: l.color }} onClick={() => onMove(job.id, l.key)}>{l.icon} {l.label}</button>
-                          ))}
-                        </div>
-                        <button className="oc-del-btn" onClick={() => onDelete(job.id)}>Löschen</button>
-                      </div>
-                    )}
+      
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="oc-lanes">
+          {LANES.map((lane) => {
+            const laneJobs = jobs.filter((j) => j.status === lane.key);
+            return (
+              <div key={lane.key} className="oc-lane" id={lane.key}>
+                <div className="oc-lane-head" style={{ borderBottomColor: lane.color }}>
+                  <span>{lane.icon}</span>
+                  <span className="oc-lane-label">{lane.label}</span>
+                  <span className="oc-lane-count" style={{ background: lane.color }}>{laneJobs.length}</span>
+                </div>
+                <SortableContext
+                  items={laneJobs.map((j) => j.id)}
+                  strategy={verticalListSortingStrategy}
+                  id={lane.key}
+                >
+                  <div className="oc-lane-body" data-lane={lane.key}>
+                    {laneJobs.length === 0 && <div className="oc-empty">Keine Jobs</div>}
+                    {laneJobs.map((job) => (
+                      <SortableJobCard
+                        key={job.id}
+                        job={job}
+                        expanded={expanded}
+                        setExpanded={setExpanded}
+                        onMove={onMove}
+                        onDelete={onDelete}
+                      />
+                    ))}
                   </div>
-                ))}
+                </SortableContext>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+        
+        <DragOverlay>
+          {activeJob ? <JobCardOverlay job={activeJob} /> : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
