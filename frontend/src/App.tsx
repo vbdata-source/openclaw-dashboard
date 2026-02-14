@@ -640,14 +640,15 @@ function ChatView({ request, events }: {
       const stream = payload.stream;
       const data = payload.data || {};
       
-      // Text delta from assistant
+      // Text from assistant - Gateway sends full text, not deltas!
       if (stream === "assistant" && typeof data.text === "string") {
         setMessages(prev => {
           const lastMsg = prev[prev.length - 1];
           if (lastMsg?.pending && lastMsg.role === "assistant") {
+            // Replace content entirely (Gateway sends cumulative text, not deltas)
             return [...prev.slice(0, -1), {
               ...lastMsg,
-              content: lastMsg.content + data.text,
+              content: data.text,
             }];
           }
           return prev;
