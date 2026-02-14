@@ -37,7 +37,7 @@ services:
       - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
     volumes:
       - dashboard-data:/app/data
-      - ${OPENCLAW_DATA_VOLUME:-openclaw-data}:/openclaw-workspace:ro
+      - openclaw-data:/openclaw-workspace:ro
     networks:
       - openclaw-net
     healthcheck:
@@ -49,7 +49,11 @@ services:
 volumes:
   dashboard-data:
     # Persistente Speicherung für Jobs
-    name: openclaw-dashboard-data
+  openclaw-data:
+    # Externes Volume vom OpenClaw Container
+    # Muss in OPENCLAW_DATA_VOLUME gesetzt werden (z.B. d48ookcc80wg8ss48kwsckws_moltbot-data)
+    external: true
+    name: ${OPENCLAW_DATA_VOLUME:-openclaw-data}
 
 networks:
   openclaw-net:
