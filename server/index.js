@@ -13,10 +13,11 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
 import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,13 +28,28 @@ const config = {
   gatewayWs: process.env.OPENCLAW_GATEWAY_URL || "ws://localhost:18789",
   gatewayHttp: process.env.OPENCLAW_GATEWAY_HTTP || "http://localhost:18789",
   gatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || "",
-  dashboardSecret: process.env.DASHBOARD_SECRET || "change-me-in-production",
+  dashboardSecret: process.env.DASHBOARD_SECRET || "",
   sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || "480"), // Minuten
   nodeEnv: process.env.NODE_ENV || "development",
 };
 
-if (config.dashboardSecret === "change-me-in-production") {
+// ── Env-Validierung (kritisch!) ───────────────────────────
+const requiredEnvVars = ["dashboardSecret"];
+const missingVars = requiredEnvVars.filter(k => !config[k] || config[k] === "change-me-in-production");
+
+if (missingVars.length > 0 && config.nodeEnv === "production") {
+  console.error("❌ KRITISCH: Fehlende Umgebungsvariablen:", missingVars.join(", "));
+  console.error("   Bitte DASHBOARD_SECRET in .env setzen!");
+  process.exit(1);
+}
+
+if (!config.dashboardSecret || config.dashboardSecret === "change-me-in-production") {
   console.warn("⚠️  DASHBOARD_SECRET nicht gesetzt! Bitte in .env konfigurieren.");
+  // In Development: Fallback-Secret (nur für lokale Tests!)
+  if (config.nodeEnv !== "production") {
+    config.dashboardSecret = "dev-only-secret-" + crypto.randomBytes(16).toString("hex");
+    console.warn("   → Dev-Fallback-Secret generiert (gilt nur für diese Session)");
+  }
 }
 
 // ── Express Setup ─────────────────────────────────────────
@@ -43,21 +59,28 @@ const server = createServer(app);
 // Trust Proxy (Traefik/Coolify Reverse Proxy)
 app.set("trust proxy", 1);
 
-// Security Headers
-app.use(
+// ── CSP Nonce Middleware ──────────────────────────────────
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+// Security Headers mit Nonce-basiertem CSP
+app.use((req, res, next) => {
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", `'nonce-${res.locals.nonce}'`],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Styles brauchen unsafe-inline für Vite
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         connectSrc: ["'self'", "ws:", "wss:"],
         imgSrc: ["'self'", "data:", "blob:"],
       },
     },
-  })
-);
+    crossOriginEmbedderPolicy: false, // Für WebSocket-Kompatibilität
+  })(req, res, next);
+});
 
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
@@ -72,11 +95,51 @@ const apiLimiter = rateLimit({
 });
 app.use("/api/", apiLimiter);
 
+// Stricter limits for sensitive endpoints
+const sensitiveLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 30, // Nur 30 req/min für kritische Endpoints
+  message: { error: "Zu viele Anfragen an diesen Endpoint." },
+});
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minuten
   max: 10,
   message: { error: "Zu viele Login-Versuche." },
 });
+
+// ── WebSocket Rate Limiting ───────────────────────────────
+const wsAttempts = new Map(); // IP -> { count, firstAttempt }
+const WS_RATE_LIMIT = 10; // Max Versuche
+const WS_RATE_WINDOW = 30 * 1000; // 30 Sekunden
+
+function checkWsRateLimit(ip) {
+  const now = Date.now();
+  const record = wsAttempts.get(ip);
+
+  if (!record || now - record.firstAttempt > WS_RATE_WINDOW) {
+    // Neues Fenster starten
+    wsAttempts.set(ip, { count: 1, firstAttempt: now });
+    return true;
+  }
+
+  if (record.count >= WS_RATE_LIMIT) {
+    return false; // Limit erreicht
+  }
+
+  record.count++;
+  return true;
+}
+
+// Cleanup alte Rate-Limit Einträge (alle 60s)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of wsAttempts.entries()) {
+    if (now - record.firstAttempt > WS_RATE_WINDOW * 2) {
+      wsAttempts.delete(ip);
+    }
+  }
+}, 60000);
 
 // ── Auth Middleware ────────────────────────────────────────
 function generateToken(payload = {}) {
@@ -176,18 +239,32 @@ async function gatewayFetch(path, options = {}) {
     ...options.headers,
   };
 
-  const response = await fetch(url, { ...options, headers, timeout: 10000 });
+  // AbortController für Timeout (Node-fetch ignoriert timeout option)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "Unknown error");
-    throw new Error(`Gateway ${response.status}: ${text}`);
-  }
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
 
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("json")) {
-    return response.json();
+    if (!response.ok) {
+      const text = await response.text().catch(() => "Unknown error");
+      throw new Error(`Gateway ${response.status}: ${text}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("json")) {
+      return response.json();
+    }
+    return response.text();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
   }
-  return response.text();
 }
 
 // ── API Routes (all require auth) ─────────────────────────
@@ -233,7 +310,7 @@ api.get("/config", async (req, res) => {
   }
 });
 
-api.put("/config", async (req, res) => {
+api.put("/config", sensitiveLimiter, async (req, res) => {
   try {
     const data = await gatewayFetch("/__openclaw__/config", {
       method: "PUT",
@@ -246,21 +323,23 @@ api.put("/config", async (req, res) => {
 });
 
 // ── Memory / Workspace Files ──────────────────────────────
+const ALLOWED_FILES = ["IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md"];
+
 api.get("/memory", async (req, res) => {
   try {
     const data = await gatewayFetch("/__openclaw__/memory");
     res.json(data);
   } catch (err) {
-    // Fallback: Versuche Workspace-Dateien direkt zu lesen
     res.status(502).json({ error: "Memory konnte nicht geladen werden", detail: err.message });
   }
 });
 
 api.get("/memory/files/:filename", async (req, res) => {
   try {
-    const allowed = ["IDENTITY.md", "SOUL.md", "USER.md"];
-    const filename = req.params.filename;
-    if (!allowed.includes(filename)) {
+    // Pfad-Normalisierung (Security!)
+    const filename = basename(decodeURIComponent(req.params.filename));
+
+    if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
     const data = await gatewayFetch(`/__openclaw__/workspace/${filename}`);
@@ -270,11 +349,12 @@ api.get("/memory/files/:filename", async (req, res) => {
   }
 });
 
-api.put("/memory/files/:filename", async (req, res) => {
+api.put("/memory/files/:filename", sensitiveLimiter, async (req, res) => {
   try {
-    const allowed = ["IDENTITY.md", "SOUL.md", "USER.md"];
-    const filename = req.params.filename;
-    if (!allowed.includes(filename)) {
+    // Pfad-Normalisierung (Security!)
+    const filename = basename(decodeURIComponent(req.params.filename));
+
+    if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
     const data = await gatewayFetch(`/__openclaw__/workspace/${filename}`, {
@@ -306,7 +386,7 @@ api.get("/cron", async (req, res) => {
   }
 });
 
-api.post("/cron", async (req, res) => {
+api.post("/cron", sensitiveLimiter, async (req, res) => {
   try {
     const data = await gatewayFetch("/__openclaw__/cron", {
       method: "POST",
@@ -318,7 +398,7 @@ api.post("/cron", async (req, res) => {
   }
 });
 
-api.delete("/cron/:id", async (req, res) => {
+api.delete("/cron/:id", sensitiveLimiter, async (req, res) => {
   try {
     const data = await gatewayFetch(`/__openclaw__/cron/${req.params.id}`, {
       method: "DELETE",
@@ -349,7 +429,7 @@ api.get("/approvals", async (req, res) => {
   }
 });
 
-api.post("/approvals/:id", async (req, res) => {
+api.post("/approvals/:id", sensitiveLimiter, async (req, res) => {
   try {
     const data = await gatewayFetch(`/__openclaw__/approvals/${req.params.id}`, {
       method: "POST",
@@ -366,9 +446,28 @@ app.use("/api", api);
 // ── WebSocket Proxy ───────────────────────────────────────
 const wss = new WebSocketServer({ noServer: true });
 
+// Metrics (simple counters)
+let wsConnectionsActive = 0;
+let wsMessagesTotal = 0;
+let wsErrorsTotal = 0;
+
 server.on("upgrade", (request, socket, head) => {
   // Nur /ws Pfad akzeptieren
   if (!request.url?.startsWith("/ws")) {
+    socket.destroy();
+    return;
+  }
+
+  // IP für Rate-Limiting
+  const ip = request.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+             request.socket.remoteAddress ||
+             "unknown";
+
+  // WebSocket Rate-Limiting prüfen
+  if (!checkWsRateLimit(ip)) {
+    console.warn(`[WS] Rate limit exceeded for IP: ${ip}`);
+    wsErrorsTotal++;
+    socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
     socket.destroy();
     return;
   }
@@ -388,16 +487,25 @@ server.on("upgrade", (request, socket, head) => {
 });
 
 wss.on("connection", (clientWs, request) => {
-  console.log("[WS] Dashboard-Client verbunden");
+  wsConnectionsActive++;
+  console.log(`[WS] Dashboard-Client verbunden (active: ${wsConnectionsActive})`);
 
   // Verbindung zum OpenClaw Gateway aufbauen (kein Token in URL — kommt im connect-Frame)
   const gatewayWs = new WebSocket(config.gatewayWs);
   let gatewayConnected = false;
   let handshakePhase = true; // true bis hello-ok empfangen
   let connectTimeout = null;
+  let pingInterval = null;
 
   gatewayWs.on("open", () => {
     console.log("[WS] Gateway WS offen, warte auf Challenge...");
+
+    // Heartbeat / Ping-Pong starten (30s Intervall)
+    pingInterval = setInterval(() => {
+      if (gatewayWs.readyState === WebSocket.OPEN) {
+        gatewayWs.ping();
+      }
+    }, 30000);
 
     // Fallback: Falls kein Challenge kommt, sende connect nach 2s
     connectTimeout = setTimeout(() => {
@@ -406,6 +514,12 @@ wss.on("connection", (clientWs, request) => {
         sendConnectFrame();
       }
     }, 2000);
+  });
+
+  // Pong-Handler für Heartbeat
+  gatewayWs.on("pong", () => {
+    // Optional: Latenz-Logging
+    // console.log("[WS] Pong received from gateway");
   });
 
   function sendConnectFrame() {
@@ -443,6 +557,7 @@ wss.on("connection", (clientWs, request) => {
 
   // Gateway → Client (mit Handshake-Logik)
   gatewayWs.on("message", (data) => {
+    wsMessagesTotal++;
     const raw = data.toString();
     let msg;
     try {
@@ -450,6 +565,11 @@ wss.on("connection", (clientWs, request) => {
     } catch {
       // Kein JSON — weiterleiten falls verbunden
       if (gatewayConnected && clientWs.readyState === WebSocket.OPEN) {
+        // Back-Pressure Check
+        if (clientWs.bufferedAmount > 2_000_000) {
+          console.warn("[WS] Back-pressure: dropping message to client");
+          return;
+        }
         clientWs.send(raw);
       }
       return;
@@ -495,6 +615,7 @@ wss.on("connection", (clientWs, request) => {
       // 3) Fehler-Response → Handshake fehlgeschlagen
       if (msg.type === "res" && msg.ok === false) {
         console.error("[WS] ❌ Gateway-Handshake fehlgeschlagen:", JSON.stringify(msg.error || msg));
+        wsErrorsTotal++;
         if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
         clientWs.send(
           JSON.stringify({
@@ -514,22 +635,39 @@ wss.on("connection", (clientWs, request) => {
 
     // ── Verbundene Phase — Events an Client weiterleiten ──
     if (clientWs.readyState === WebSocket.OPEN) {
+      // Back-Pressure Check
+      if (clientWs.bufferedAmount > 2_000_000) {
+        console.warn("[WS] Back-pressure: dropping message to client");
+        return;
+      }
       clientWs.send(raw);
     }
   });
 
   // Client → Gateway (nur wenn verbunden)
   clientWs.on("message", (data) => {
+    wsMessagesTotal++;
     if (gatewayConnected && gatewayWs.readyState === WebSocket.OPEN) {
+      // Back-Pressure Check
+      if (gatewayWs.bufferedAmount > 2_000_000) {
+        console.warn("[WS] Back-pressure: dropping message to gateway");
+        return;
+      }
       gatewayWs.send(data.toString());
     }
   });
+
+  // Cleanup helper
+  function cleanup() {
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+  }
 
   // Cleanup
   gatewayWs.on("close", (code, reason) => {
     gatewayConnected = false;
     handshakePhase = true;
-    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    cleanup();
     console.log(`[WS] Gateway-Verbindung getrennt (code=${code}, reason=${reason || "n/a"})`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(
@@ -543,20 +681,44 @@ wss.on("connection", (clientWs, request) => {
   });
 
   gatewayWs.on("error", (err) => {
+    wsErrorsTotal++;
     console.error("[WS] Gateway-Fehler:", err.message);
   });
 
   clientWs.on("close", () => {
-    console.log("[WS] Dashboard-Client getrennt");
-    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    wsConnectionsActive--;
+    console.log(`[WS] Dashboard-Client getrennt (active: ${wsConnectionsActive})`);
+    cleanup();
     if (gatewayWs.readyState === WebSocket.OPEN) {
       gatewayWs.close();
     }
   });
 
   clientWs.on("error", (err) => {
+    wsErrorsTotal++;
     console.error("[WS] Client-Fehler:", err.message);
   });
+});
+
+// ── Simple Metrics Endpoint ───────────────────────────────
+app.get("/metrics", (req, res) => {
+  res.set("Content-Type", "text/plain");
+  res.send(`# HELP ws_connections_active Active WebSocket connections
+# TYPE ws_connections_active gauge
+ws_connections_active ${wsConnectionsActive}
+
+# HELP ws_messages_total Total WebSocket messages processed
+# TYPE ws_messages_total counter
+ws_messages_total ${wsMessagesTotal}
+
+# HELP ws_errors_total Total WebSocket errors
+# TYPE ws_errors_total counter
+ws_errors_total ${wsErrorsTotal}
+
+# HELP process_uptime_seconds Process uptime in seconds
+# TYPE process_uptime_seconds gauge
+process_uptime_seconds ${Math.floor(process.uptime())}
+`);
 });
 
 // ── Static Files (React Build) ────────────────────────────
@@ -587,12 +749,13 @@ function parseCookies(cookieHeader) {
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`
 ╔══════════════════════════════════════════════════╗
-║  🦞 OpenClaw Dashboard v1.0.0                   ║
+║  🦞 OpenClaw Dashboard v1.1.0                   ║
 ║                                                  ║
 ║  Dashboard:  http://0.0.0.0:${String(config.port).padEnd(5)}              ║
 ║  Gateway:    ${config.gatewayWs.padEnd(35)} ║
-║  Auth:       ${config.dashboardSecret === "change-me-in-production" ? "⚠️  DEFAULT (unsicher!)".padEnd(35) : "✅ Konfiguriert".padEnd(35)} ║
+║  Auth:       ${!config.dashboardSecret || config.dashboardSecret.startsWith("dev-only") ? "⚠️  DEV MODE (unsicher!)".padEnd(35) : "✅ Konfiguriert".padEnd(35)} ║
 ║  Env:        ${config.nodeEnv.padEnd(35)} ║
+║  Metrics:    /metrics                            ║
 ╚══════════════════════════════════════════════════╝
   `);
 });
@@ -601,7 +764,10 @@ server.listen(config.port, "0.0.0.0", () => {
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
     console.log(`\n[${signal}] Fahre herunter...`);
-    wss.clients.forEach((ws) => ws.close());
+    // Alle Client-Verbindungen schließen (inkl. Gateway-Verbindungen)
+    wss.clients.forEach((ws) => {
+      ws.close(1001, "Server shutdown");
+    });
     server.close(() => {
       console.log("Server beendet.");
       process.exit(0);
