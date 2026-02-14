@@ -160,6 +160,22 @@ class JobExecutor {
       return;
     }
 
+    // Response für Agent Job (isolierte Session)
+    if (msg.type === "res" && msg.id && this.jobResultHandlers.has(msg.id)) {
+      const handler = this.jobResultHandlers.get(msg.id);
+      if (msg.ok) {
+        // Extrahiere Text aus Agent-Response
+        const payload = msg.payload || {};
+        const text = payload.text || payload.content || 
+                     (typeof payload === "string" ? payload : JSON.stringify(payload));
+        console.log(`[JobExecutor] Agent response received, text length: ${text?.length || 0}`);
+        handler.onComplete(text);
+      } else {
+        handler.onError(msg.error?.message || "Agent request failed");
+      }
+      return;
+    }
+
     // Event für laufenden Job (Agent Stream)
     if (msg.type === "event" && msg.event === "agent") {
       this.handleAgentEvent(msg.payload);
@@ -303,16 +319,16 @@ class JobExecutor {
         },
       });
 
-      // Chat.send an Gateway
+      // Agent-Request an Gateway (isolierte Subagent-Session)
       this.send({
         type: "req",
-        method: "chat.send",
+        method: "agent",
         id: idempotencyKey,
         params: {
-          sessionKey: `agent:main:dashboard:job:${job.id}`,
+          sessionKey: `subagent:dashboard:job:${job.id}`,
           message: taskMessage,
           idempotencyKey: idempotencyKey,
-          timeoutMs: 300000,
+          timeout: 300000,
           deliver: false,
         },
       });
