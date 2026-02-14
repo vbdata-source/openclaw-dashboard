@@ -1599,28 +1599,29 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       if (result?.ran === false && result?.reason === "not-due") {
         console.log("[Cron] Job not due, executing manually...");
         
-        if (job.payload.kind === "agentTurn") {
-          // Agent Turn über sessions.spawn ausführen
-          const spawnParams: any = {
-            task: job.payload.message || job.payload.text || "",
-            runTimeoutSeconds: job.payload.timeoutSeconds || 120,
-          };
-          
-          // Delivery-Optionen
-          if (job.payload.deliver && job.payload.channel) {
-            spawnParams.deliver = true;
-            spawnParams.channel = job.payload.channel;
-          }
-          
-          await request("sessions.spawn", spawnParams);
-          alert("✅ Job wurde manuell ausgeführt!");
+        const message = job.payload.message || job.payload.text || "";
+        
+        if (job.payload.deliver && job.payload.channel) {
+          // Direkt Nachricht an Channel senden
+          await request("message.send", {
+            channel: job.payload.channel,
+            message: `🧪 [Test] ${message}`,
+          });
+          alert("✅ Test-Nachricht wurde gesendet!");
         } else if (job.payload.kind === "systemEvent") {
           // System Event über cron.wake senden
           await request("cron.wake", { 
-            text: job.payload.text || "",
+            text: message,
             mode: "now" 
           });
           alert("✅ System Event wurde gesendet!");
+        } else {
+          // Fallback: Wake Event
+          await request("cron.wake", { 
+            text: `[Cron Test] ${message}`,
+            mode: "now" 
+          });
+          alert("✅ Wake Event wurde gesendet!");
         }
       } else {
         alert("✅ Job wurde ausgelöst!");
