@@ -776,84 +776,181 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, lo
   );
 }
 
-// ── Memory Editor ─────────────────────────────────────────
-function MemoryEditor({ entries, onUpdate, onAdd, onDelete, loading }: {
-  entries: MemoryEntry[];
-  onUpdate: (id: string, val: string) => void;
-  onAdd: (e: Omit<MemoryEntry, "id" | "updatedAt">) => void;
-  onDelete: (id: string) => void;
-  loading?: boolean;
-}) {
-  const [scope, setScope] = useState<string>("all");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editVal, setEditVal] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ key: "", value: "", scope: "identity" as MemoryEntry["scope"] });
+// ── Workspace Files Editor ────────────────────────────────
+const WORKSPACE_FILES = [
+  { name: "MEMORY.md", icon: "🧠", desc: "Langzeitgedächtnis", color: "#8b5cf6" },
+  { name: "IDENTITY.md", icon: "🪪", desc: "Name & Rolle", color: "#ec4899" },
+  { name: "SOUL.md", icon: "💫", desc: "Persönlichkeit", color: "#f59e0b" },
+  { name: "USER.md", icon: "👤", desc: "Benutzer-Info", color: "#06b6d4" },
+  { name: "TOOLS.md", icon: "🔧", desc: "Tool-Notizen", color: "#84cc16" },
+  { name: "HEARTBEAT.md", icon: "💓", desc: "Heartbeat Tasks", color: "#ef4444" },
+  { name: "AGENTS.md", icon: "📋", desc: "Agent-Anweisungen", color: "#64748b" },
+];
 
-  const filtered = scope === "all" ? entries : entries.filter((e) => e.scope === scope);
+function WorkspaceFilesEditor({ loading: initialLoading }: { loading?: boolean }) {
+  const [files, setFiles] = useState<Record<string, string>>({});
+  const [folderFiles, setFolderFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [view, setView] = useState<"main" | "memory">("main");
+
+  // Dateien laden
+  useEffect(() => {
+    const loadFiles = async () => {
+      setLoading(true);
+      const loaded: Record<string, string> = {};
+      
+      // Hauptdateien laden
+      for (const file of WORKSPACE_FILES) {
+        try {
+          const res = await api.memory.getFile(file.name);
+          loaded[file.name] = res.content;
+        } catch {
+          loaded[file.name] = ""; // Datei existiert nicht
+        }
+      }
+      setFiles(loaded);
+
+      // memory/ Ordner laden
+      try {
+        const folderRes = await api.memory.listFolder();
+        setFolderFiles(folderRes.files || []);
+      } catch {
+        setFolderFiles([]);
+      }
+
+      setLoading(false);
+    };
+    loadFiles();
+  }, []);
+
+  // Datei öffnen
+  const openFile = async (filename: string, isFolder = false) => {
+    if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    
+    setSelectedFile(filename);
+    setDirty(false);
+    
+    if (isFolder) {
+      try {
+        const res = await api.memory.getFolderFile(filename);
+        setEditContent(res.content);
+      } catch {
+        setEditContent("");
+      }
+    } else {
+      setEditContent(files[filename] || "");
+    }
+  };
+
+  // Datei speichern
+  const saveFile = async () => {
+    if (!selectedFile) return;
+    setSaving(true);
+    
+    try {
+      const isFolder = !WORKSPACE_FILES.some(f => f.name === selectedFile);
+      if (isFolder) {
+        await api.memory.updateFolderFile(selectedFile, editContent);
+      } else {
+        await api.memory.updateFile(selectedFile, editContent);
+        setFiles(prev => ({ ...prev, [selectedFile]: editContent }));
+      }
+      setDirty(false);
+      alert("✅ Gespeichert!");
+    } catch (err: any) {
+      alert("❌ Fehler: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fileInfo = selectedFile ? WORKSPACE_FILES.find(f => f.name === selectedFile) : null;
 
   return (
-    <div>
+    <div className="oc-workspace">
       <div className="oc-section-header">
-        <h2 className="oc-view-title">Memory & Identity {loading && <span className="oc-loading-sm">⏳</span>}</h2>
-        <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Eintrag</button>
-      </div>
-      {showAdd && (
-        <div className="oc-add-panel">
-          <div className="oc-add-row">
-            <input className="oc-input" placeholder="Schlüssel" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} style={{ flex: 1 }} />
-            <select className="oc-input oc-select" value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value as any })} style={{ width: 140 }}>
-              {Object.entries(SCOPE_CFG).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
-            </select>
-          </div>
-          <textarea className="oc-input oc-textarea" placeholder="Wert" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} rows={2} />
-          <div className="oc-add-row">
-            <button className="oc-btn-primary" onClick={() => { if (form.key && form.value) { onAdd(form); setForm({ key: "", value: "", scope: "identity" }); setShowAdd(false); } }} disabled={!form.key || !form.value}>Erstellen</button>
-            <button className="oc-btn-ghost" onClick={() => setShowAdd(false)}>Abbrechen</button>
-          </div>
+        <h2 className="oc-view-title">Workspace Dateien {loading && <span className="oc-loading-sm">⏳</span>}</h2>
+        <div className="oc-view-tabs">
+          <button className={`oc-view-tab ${view === "main" ? "oc-view-tab--active" : ""}`} onClick={() => setView("main")}>📄 Hauptdateien</button>
+          <button className={`oc-view-tab ${view === "memory" ? "oc-view-tab--active" : ""}`} onClick={() => setView("memory")}>📁 memory/</button>
         </div>
-      )}
-      <div className="oc-scope-bar">
-        {Object.entries(SCOPE_CFG).map(([k, v]) => {
-          const c = entries.filter((e) => e.scope === k).length;
-          return (
-            <button key={k} className={`oc-scope-btn ${scope === k ? "oc-scope-btn--active" : ""}`} style={scope === k ? { borderColor: v.color, color: v.color } : {}} onClick={() => setScope(scope === k ? "all" : k)}>
-              {v.icon} {v.label} <span className="oc-scope-count" style={{ background: v.bg, color: v.color }}>{c}</span>
-            </button>
-          );
-        })}
       </div>
-      <div className="oc-mem-grid">
-        {filtered.map((entry) => {
-          const s = SCOPE_CFG[entry.scope] || SCOPE_CFG.user;
-          return (
-            <div key={entry.id} className="oc-mem-card">
-              <div className="oc-mem-top">
-                <code className="oc-mem-key">{entry.key}</code>
-                <span className="oc-mem-scope" style={{ color: s.color, background: s.bg }}>{s.icon} {s.label}</span>
+
+      <div className="oc-workspace-layout">
+        {/* Dateiliste */}
+        <div className="oc-file-list">
+          {view === "main" ? (
+            WORKSPACE_FILES.map(file => (
+              <div 
+                key={file.name}
+                className={`oc-file-item ${selectedFile === file.name ? "oc-file-item--active" : ""} ${!files[file.name] ? "oc-file-item--empty" : ""}`}
+                onClick={() => openFile(file.name)}
+                style={{ borderLeftColor: file.color }}
+              >
+                <span className="oc-file-icon">{file.icon}</span>
+                <div className="oc-file-info">
+                  <span className="oc-file-name">{file.name}</span>
+                  <span className="oc-file-desc">{file.desc}</span>
+                </div>
+                {files[file.name] && <span className="oc-file-size">{(files[file.name].length / 1024).toFixed(1)}k</span>}
               </div>
-              {editing === entry.id ? (
-                <div className="oc-mem-edit">
-                  <textarea className="oc-input oc-textarea" value={editVal} onChange={(e) => setEditVal(e.target.value)} rows={2} autoFocus />
-                  <div className="oc-add-row">
-                    <button className="oc-btn-primary" onClick={() => { onUpdate(entry.id, editVal); setEditing(null); }}>Speichern</button>
-                    <button className="oc-btn-ghost" onClick={() => setEditing(null)}>Abbrechen</button>
+            ))
+          ) : (
+            <>
+              {folderFiles.length === 0 && <div className="oc-empty">Keine Dateien in memory/</div>}
+              {folderFiles.map(filename => (
+                <div 
+                  key={filename}
+                  className={`oc-file-item ${selectedFile === filename ? "oc-file-item--active" : ""}`}
+                  onClick={() => openFile(filename, true)}
+                >
+                  <span className="oc-file-icon">📝</span>
+                  <div className="oc-file-info">
+                    <span className="oc-file-name">{filename}</span>
                   </div>
                 </div>
-              ) : (
-                <div className="oc-mem-val" onClick={() => { setEditing(entry.id); setEditVal(entry.value); }}>{entry.value}</div>
-              )}
-              <div className="oc-mem-foot">
-                <span className="oc-time">{new Date(entry.updatedAt).toLocaleString("de-AT")}</span>
-                <div className="oc-mem-btns">
-                  {editing !== entry.id && <button className="oc-icon-btn" onClick={() => { setEditing(entry.id); setEditVal(entry.value); }}>✏️</button>}
-                  <button className="oc-icon-btn" onClick={() => onDelete(entry.id)}>🗑️</button>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Editor */}
+        <div className="oc-file-editor">
+          {selectedFile ? (
+            <>
+              <div className="oc-editor-header">
+                <div className="oc-editor-title">
+                  <span>{fileInfo?.icon || "📝"}</span>
+                  <span>{selectedFile}</span>
+                  {dirty && <span className="oc-dirty-badge">●</span>}
                 </div>
+                <button 
+                  className="oc-btn-primary" 
+                  onClick={saveFile} 
+                  disabled={saving || !dirty}
+                >
+                  {saving ? "⏳ Speichern..." : "💾 Speichern"}
+                </button>
               </div>
+              <textarea 
+                className="oc-editor-textarea"
+                value={editContent}
+                onChange={(e) => { setEditContent(e.target.value); setDirty(true); }}
+                placeholder="Dateiinhalt..."
+                spellCheck={false}
+              />
+            </>
+          ) : (
+            <div className="oc-editor-empty">
+              <span className="oc-editor-empty-icon">📄</span>
+              <p>Wähle eine Datei zum Bearbeiten</p>
             </div>
-          );
-        })}
-        {filtered.length === 0 && <div className="oc-empty" style={{ gridColumn: "1/-1" }}>{loading ? "Lade Memory..." : "Keine Einträge"}</div>}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2172,7 +2269,7 @@ export default function App() {
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
-        {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
+        {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
       </main>

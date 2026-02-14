@@ -393,7 +393,7 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Memory / Workspace Files ──────────────────────────────
-const ALLOWED_FILES = ["IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md"];
+const ALLOWED_FILES = ["MEMORY.md", "IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "AGENTS.md"];
 
 api.get("/memory", async (req, res) => {
   try {
@@ -428,6 +428,47 @@ api.put("/memory/files/:filename", sensitiveLimiter, async (req, res) => {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
     const data = await gatewayFetch(`/__openclaw__/workspace/${filename}`, {
+      method: "PUT",
+      body: JSON.stringify({ content: req.body.content }),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
+  }
+});
+
+// ── Memory Folder (memory/*.md) ───────────────────────────
+api.get("/memory/folder", async (req, res) => {
+  try {
+    const data = await gatewayFetch("/__openclaw__/workspace/memory");
+    res.json(data);
+  } catch (err) {
+    // Fallback: leeres Array wenn Ordner nicht existiert
+    res.json({ files: [] });
+  }
+});
+
+api.get("/memory/folder/:filename", async (req, res) => {
+  try {
+    const filename = basename(decodeURIComponent(req.params.filename));
+    // Nur .md Dateien erlauben
+    if (!filename.endsWith(".md")) {
+      return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
+    }
+    const data = await gatewayFetch(`/__openclaw__/workspace/memory/${filename}`);
+    res.json({ filename, content: data });
+  } catch (err) {
+    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
+  }
+});
+
+api.put("/memory/folder/:filename", sensitiveLimiter, async (req, res) => {
+  try {
+    const filename = basename(decodeURIComponent(req.params.filename));
+    if (!filename.endsWith(".md")) {
+      return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
+    }
+    const data = await gatewayFetch(`/__openclaw__/workspace/memory/${filename}`, {
       method: "PUT",
       body: JSON.stringify({ content: req.body.content }),
     });

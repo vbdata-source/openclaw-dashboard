@@ -421,3 +421,34 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-checkbox-label input[type="checkbox"]{width:16px;height:16px;cursor:pointer}
 .oc-form-title{margin:0 0 12px 0;font-size:14px;color:var(--tx);font-weight:500}
 .oc-deliver-row{background:rgba(34,197,94,0.1);padding:10px 12px;border-radius:6px;border:1px solid rgba(34,197,94,0.2)}
+
+/* ── Workspace Files Editor ─────────────────────────────── */
+.oc-workspace{display:flex;flex-direction:column;gap:16px;height:100%}
+.oc-view-tabs{display:flex;gap:4px}
+.oc-view-tab{background:transparent;border:1px solid var(--bd);color:var(--txd);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+.oc-view-tab:hover{background:var(--s2)}
+.oc-view-tab--active{background:var(--ac);border-color:var(--ac);color:white}
+.oc-workspace-layout{display:flex;gap:16px;flex:1;min-height:0}
+.oc-file-list{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow-y:auto;padding-right:8px}
+.oc-file-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--bd);border-left:3px solid var(--bd);border-radius:6px;cursor:pointer;transition:all 0.15s}
+.oc-file-item:hover{background:var(--s1);border-color:var(--txd)}
+.oc-file-item--active{background:var(--s2);border-color:var(--ac)}
+.oc-file-item--empty{opacity:0.5}
+.oc-file-icon{font-size:18px}
+.oc-file-info{flex:1;min-width:0}
+.oc-file-name{display:block;font-size:13px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-file-desc{display:block;font-size:11px;color:var(--txd)}
+.oc-file-size{font-size:10px;color:var(--txd);font-family:var(--mono)}
+.oc-file-editor{flex:1;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;min-width:0}
+.oc-editor-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--bd);background:var(--s1)}
+.oc-editor-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;color:var(--tx)}
+.oc-dirty-badge{color:#f59e0b;font-size:10px}
+.oc-editor-textarea{flex:1;width:100%;padding:16px;background:var(--bg);border:none;color:var(--tx);font-family:var(--mono);font-size:13px;line-height:1.6;resize:none}
+.oc-editor-textarea:focus{outline:none}
+.oc-editor-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--txd)}
+.oc-editor-empty-icon{font-size:48px;margin-bottom:12px;opacity:0.5}
+.oc-editor-empty p{margin:0;font-size:14px}
+@media(max-width:768px){
+  .oc-workspace-layout{flex-direction:column}
+  .oc-file-list{width:100%;max-height:200px}
+}

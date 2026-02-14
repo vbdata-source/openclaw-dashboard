@@ -104,6 +104,16 @@ export const memory = {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),
+  // Memory Folder (memory/*.md)
+  listFolder: () =>
+    request<{ files: string[] }>("/memory/folder"),
+  getFolderFile: (filename: string) =>
+    request<{ filename: string; content: string }>(`/memory/folder/${filename}`),
+  updateFolderFile: (filename: string, content: string) =>
+    request(`/memory/folder/${filename}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
 };
 
 // ── Agents ────────────────────────────────────────────────
