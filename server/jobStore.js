@@ -11,7 +11,8 @@ import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.JOB_DATA_DIR || join(__dirname, "../data");
+// Im Docker: /app/server → /app/server/data (beschreibbar)
+const DATA_DIR = process.env.JOB_DATA_DIR || join(__dirname, "data");
 const JOBS_FILE = join(DATA_DIR, "jobs.json");
 const RESULTS_DIR = join(DATA_DIR, "results");
 
