@@ -427,10 +427,9 @@ wss.on("connection", (clientWs, request) => {
         },
         role: "operator",
         scopes: [
-          "operator.status",
-          "operator.sessions",
-          "operator.config",
-          "operator.approvals",
+          "operator.read",
+          "operator.write",
+          "operator.admin",
         ],
         auth: {},
       },
