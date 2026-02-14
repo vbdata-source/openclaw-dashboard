@@ -138,6 +138,91 @@ export const approvals = {
     }),
 };
 
+// ── Jobs (Dashboard Job Queue) ────────────────────────────
+export interface JobData {
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  status?: "backlog" | "queued" | "running" | "done" | "failed";
+  scheduledAt?: string | null;
+  agent?: string;
+  channel?: string;
+}
+
+export interface Job extends JobData {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string | null;
+  error?: string | null;
+  result?: string | null;
+  resultUrl?: string | null;
+  estimatedTokens?: number | null;
+  history: Array<{
+    timestamp: string;
+    status: string;
+    message?: string;
+  }>;
+}
+
+export interface JobsResponse {
+  jobs: Job[];
+  stats: {
+    total: number;
+    byStatus: Record<string, number>;
+    queueLength: number;
+    isRunning: boolean;
+    runningJobId: string | null;
+  };
+}
+
+export const jobs = {
+  list: (filter?: { status?: string; priority?: string }) => {
+    const params = new URLSearchParams();
+    if (filter?.status) params.set("status", filter.status);
+    if (filter?.priority) params.set("priority", filter.priority);
+    const query = params.toString();
+    return request<JobsResponse>(`/jobs${query ? `?${query}` : ""}`);
+  },
+  
+  get: (id: string) => request<Job>(`/jobs/${id}`),
+  
+  create: (data: JobData) =>
+    request<Job>("/jobs", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  
+  update: (id: string, data: Partial<JobData>) =>
+    request<Job>(`/jobs/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/jobs/${id}`, { method: "DELETE" }),
+  
+  move: (id: string, status: string) =>
+    request<Job>(`/jobs/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  
+  getResult: (id: string) =>
+    request<string>(`/jobs/${id}/result`),
+  
+  queueStatus: () =>
+    request<{
+      total: number;
+      byStatus: Record<string, number>;
+      queueLength: number;
+      isRunning: boolean;
+      runningJobId: string | null;
+      nextJobId: string | null;
+      nextJobTitle: string | null;
+    }>("/jobs/queue/status"),
+};
+
 export const api = {
   auth,
   health,
@@ -149,6 +234,7 @@ export const api = {
   cron,
   events,
   approvals,
+  jobs,
 };
 
 export default api;

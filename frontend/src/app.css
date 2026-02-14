@@ -81,6 +81,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-lane-count{font-size:10px;color:#fff;padding:1px 7px;border-radius:10px;font-weight:700}
 .oc-lane-body{padding:6px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:80px;border-radius:var(--r);transition:background .15s,border .15s;border:2px solid transparent}
 .oc-lane-body--over{background:rgba(59,130,246,0.1);border:2px dashed var(--ac)}
+.oc-result-link{display:block;margin-top:6px;padding:4px 8px;background:rgba(59,130,246,0.1);border-radius:var(--r);color:var(--ac);text-decoration:none;font-size:12px}
+.oc-result-link:hover{background:rgba(59,130,246,0.2)}
+.oc-input-label{color:var(--tx);font-size:13px}
 .oc-lane-body:empty::after{content:"Hierher ziehen";display:flex;align-items:center;justify-content:center;height:60px;border:2px dashed var(--bd);border-radius:var(--r);color:var(--txd);font-size:12px}
 .oc-card{background:var(--s2);border:1px solid var(--bds);border-radius:var(--r);padding:9px 11px;cursor:grab;transition:all .12s;touch-action:none}
 .oc-card--dragging{opacity:.5;cursor:grabbing;border-color:var(--ac);box-shadow:0 0 0 2px var(--acg)}

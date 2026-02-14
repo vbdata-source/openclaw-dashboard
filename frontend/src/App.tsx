@@ -31,6 +31,12 @@ import { CSS } from "@dnd-kit/utilities";
 export type JobStatus = "backlog" | "queued" | "running" | "done" | "failed";
 export type JobPriority = "low" | "medium" | "high" | "critical";
 
+export interface JobHistoryEntry {
+  timestamp: string;
+  status: JobStatus;
+  message?: string;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -40,9 +46,14 @@ export interface Job {
   agent: string;
   createdAt: string;
   updatedAt: string;
+  scheduledAt?: string | null;
+  finishedAt?: string | null;
   channel?: string;
-  estimatedTokens?: number;
-  result?: string;
+  estimatedTokens?: number | null;
+  result?: string | null;
+  resultUrl?: string | null;
+  error?: string | null;
+  history: JobHistoryEntry[];
 }
 
 export interface MemoryEntry {
@@ -183,11 +194,14 @@ function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete }: {
       </div>
       <p className="oc-card-desc">{job.description}</p>
       <div className="oc-card-meta">
+        {job.scheduledAt && <span className="oc-tag" title="Geplant">⏰ {new Date(job.scheduledAt).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}</span>}
         {job.channel && <span className="oc-tag">{job.channel}</span>}
         {job.estimatedTokens && <span className="oc-tok">~{(job.estimatedTokens / 1000).toFixed(1)}k</span>}
         <span className="oc-time">{timeAgo(job.updatedAt)}</span>
       </div>
-      {job.result && <div className={`oc-result ${job.status === "failed" ? "oc-result--err" : ""}`}>{job.result}</div>}
+      {job.error && <div className="oc-result oc-result--err">❌ {job.error}</div>}
+      {job.result && !job.error && <div className={`oc-result ${job.status === "failed" ? "oc-result--err" : ""}`}>{job.result}</div>}
+      {job.resultUrl && <a href={job.resultUrl} target="_blank" rel="noopener" className="oc-result-link" onClick={(e) => e.stopPropagation()}>📄 Ergebnis ansehen</a>}
       {expanded === job.id && (
         <div className="oc-card-actions" onClick={(e) => e.stopPropagation()}>
           <div className="oc-move-btns">
@@ -234,13 +248,19 @@ function JobCardOverlay({ job }: { job: Job }) {
 function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
   jobs: Job[];
   onMove: (id: string, s: JobStatus) => void;
-  onAdd: (j: Omit<Job, "id" | "createdAt" | "updatedAt">) => void;
+  onAdd: (j: Omit<Job, "id" | "createdAt" | "updatedAt" | "history">) => void;
   onDelete: (id: string) => void;
   loading?: boolean;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: "", description: "", priority: "medium" as JobPriority, status: "backlog" as JobStatus });
+  const [form, setForm] = useState({ 
+    title: "", 
+    description: "", 
+    priority: "medium" as JobPriority, 
+    status: "backlog" as JobStatus,
+    scheduledAt: "" as string,
+  });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overLane, setOverLane] = useState<JobStatus | null>(null);
 
@@ -259,8 +279,12 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
 
   const handleAdd = () => {
     if (!form.title.trim()) return;
-    onAdd({ ...form, agent: "AJBot" });
-    setForm({ title: "", description: "", priority: "medium", status: "backlog" });
+    onAdd({ 
+      ...form, 
+      agent: "AJBot",
+      scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+    });
+    setForm({ title: "", description: "", priority: "medium", status: "backlog", scheduledAt: "" });
     setShowAdd(false);
   };
 
@@ -331,7 +355,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
       {showAdd && (
         <div className="oc-add-panel">
           <input className="oc-input" placeholder="Job-Titel" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} autoFocus />
-          <textarea className="oc-input oc-textarea" placeholder="Beschreibung" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+          <textarea className="oc-input oc-textarea" placeholder="Beschreibung (Task für den Agent)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
           <div className="oc-add-row">
             <select className="oc-input oc-select" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as JobPriority })}>
               <option value="low">Niedrig</option><option value="medium">Mittel</option><option value="high">Hoch</option><option value="critical">Kritisch</option>
@@ -339,6 +363,21 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
             <select className="oc-input oc-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as JobStatus })}>
               {LANES.map((l) => <option key={l.key} value={l.key}>{l.icon} {l.label}</option>)}
             </select>
+          </div>
+          <div className="oc-add-row">
+            <label className="oc-input-label" style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+              <span style={{ whiteSpace: "nowrap" }}>⏰ Ausführung:</span>
+              <input 
+                type="datetime-local" 
+                className="oc-input" 
+                value={form.scheduledAt} 
+                onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })}
+                style={{ flex: 1 }}
+              />
+            </label>
+            <span style={{ color: "var(--txd)", fontSize: "12px" }}>{form.scheduledAt ? "" : "(leer = sofort)"}</span>
+          </div>
+          <div className="oc-add-row">
             <button className="oc-btn-primary" onClick={handleAdd} disabled={!form.title.trim()}>Erstellen</button>
             <button className="oc-btn-ghost" onClick={() => setShowAdd(false)}>Abbrechen</button>
           </div>
@@ -1029,28 +1068,13 @@ export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("chat");
 
-  // Echte Daten (leer initialisiert, Jobs aus LocalStorage laden)
-  const [jobs, setJobs] = useState<Job[]>(() => {
-    try {
-      const saved = localStorage.getItem("oc-dashboard-jobs");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Echte Daten (leer initialisiert, Jobs von API laden)
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [memory, setMemory] = useState<MemoryEntry[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [cfg, setCfg] = useState<any>({});
   const [dataLoading, setDataLoading] = useState(false);
-
-  // Jobs in LocalStorage speichern bei Änderungen
-  useEffect(() => {
-    try {
-      localStorage.setItem("oc-dashboard-jobs", JSON.stringify(jobs));
-    } catch (err) {
-      console.warn("[App] Jobs speichern fehlgeschlagen:", err);
-    }
-  }, [jobs]);
+  const [jobsLoading, setJobsLoading] = useState(false);
 
   // Session Detail State
   const [selectedSession, setSelectedSession] = useState<SessionEntry | null>(null);
@@ -1151,14 +1175,13 @@ export default function App() {
         console.warn("[App] Sessions laden fehlgeschlagen:", err.message);
       }
 
-      // 4. Cron/Jobs laden
+      // 4. Dashboard Jobs laden (von Dashboard API, nicht Gateway)
       try {
-        const res = await gwRequest("cron.list");
-        const mapped = mapCronToJobs(res);
-        setJobs(mapped);
-        console.log("[App] Cron-Jobs geladen:", mapped.length);
+        const res = await api.jobs.list();
+        setJobs(res.jobs || []);
+        console.log("[App] Dashboard-Jobs geladen:", res.jobs?.length || 0);
       } catch (err: any) {
-        console.warn("[App] Cron laden fehlgeschlagen:", err.message);
+        console.warn("[App] Jobs laden fehlgeschlagen:", err.message);
       }
 
       // 5. Memory aus Status + Config ableiten
@@ -1202,17 +1225,78 @@ export default function App() {
         );
       }
     }
+
+    // ── Job-Events live verarbeiten ─────────────────────────
+    if (latest.event === "job.created") {
+      const job = latest.payload;
+      if (job?.id) {
+        console.log("[App] Job created:", job.id);
+        setJobs((prev) => {
+          if (prev.find((j) => j.id === job.id)) return prev;
+          return [job, ...prev];
+        });
+      }
+    }
+
+    if (latest.event === "job.updated") {
+      const job = latest.payload;
+      if (job?.id) {
+        console.log("[App] Job updated:", job.id, job.status);
+        setJobs((prev) => prev.map((j) => (j.id === job.id ? job : j)));
+      }
+    }
+
+    if (latest.event === "job.deleted") {
+      const { id } = latest.payload || {};
+      if (id) {
+        console.log("[App] Job deleted:", id);
+        setJobs((prev) => prev.filter((j) => j.id !== id));
+      }
+    }
   }, [wsEvents]);
 
-  const moveJob = useCallback((id: string, s: JobStatus) => {
-    setJobs((p) => p.map((j) => (j.id === id ? { ...j, status: s, updatedAt: new Date().toISOString() } : j)));
+  // ── Job Actions (API-basiert) ─────────────────────────────
+  const moveJob = useCallback(async (id: string, status: JobStatus) => {
+    // Optimistic update
+    setJobs((p) => p.map((j) => (j.id === id ? { ...j, status, updatedAt: new Date().toISOString() } : j)));
+    try {
+      await api.jobs.move(id, status);
+    } catch (err: any) {
+      console.error("[App] Job move failed:", err.message);
+      // Reload jobs on error
+      api.jobs.list().then((res) => setJobs(res.jobs || []));
+    }
   }, []);
 
-  const addJob = useCallback((j: Omit<Job, "id" | "createdAt" | "updatedAt">) => {
-    setJobs((p) => [...p, { ...j, id: `j${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]);
+  const addJob = useCallback(async (j: Omit<Job, "id" | "createdAt" | "updatedAt" | "history">) => {
+    try {
+      const created = await api.jobs.create({
+        title: j.title,
+        description: j.description,
+        priority: j.priority,
+        status: j.status,
+        agent: j.agent,
+        channel: j.channel,
+        scheduledAt: j.scheduledAt,
+      });
+      // Job wird via WebSocket Event hinzugefügt
+      console.log("[App] Job created:", created.id);
+    } catch (err: any) {
+      console.error("[App] Job create failed:", err.message);
+    }
   }, []);
 
-  const delJob = useCallback((id: string) => setJobs((p) => p.filter((j) => j.id !== id)), []);
+  const delJob = useCallback(async (id: string) => {
+    // Optimistic update
+    setJobs((p) => p.filter((j) => j.id !== id));
+    try {
+      await api.jobs.delete(id);
+    } catch (err: any) {
+      console.error("[App] Job delete failed:", err.message);
+      // Reload jobs on error
+      api.jobs.list().then((res) => setJobs(res.jobs || []));
+    }
+  }, []);
 
   const updMem = useCallback((id: string, v: string) => setMemory((p) => p.map((m) => (m.id === id ? { ...m, value: v, updatedAt: new Date().toISOString() } : m))), []);
 

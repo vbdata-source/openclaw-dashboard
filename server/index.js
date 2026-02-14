@@ -19,6 +19,7 @@ import { createServer } from "http";
 import { readFileSync, existsSync } from "fs";
 import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
+import { jobStore, JobStatus } from "./jobStore.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -441,6 +442,135 @@ api.post("/approvals/:id", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Jobs (Dashboard Job Queue) ────────────────────────────
+// List all jobs
+api.get("/jobs", (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.priority) filter.priority = req.query.priority;
+    
+    const jobs = jobStore.list(filter);
+    const stats = jobStore.getStats();
+    res.json({ jobs, stats });
+  } catch (err) {
+    res.status(500).json({ error: "Jobs nicht ladbar", detail: err.message });
+  }
+});
+
+// Get single job
+api.get("/jobs/:id", (req, res) => {
+  try {
+    const job = jobStore.get(req.params.id);
+    if (!job) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    res.json(job);
+  } catch (err) {
+    res.status(500).json({ error: "Job nicht ladbar", detail: err.message });
+  }
+});
+
+// Create job
+api.post("/jobs", sensitiveLimiter, (req, res) => {
+  try {
+    const { title, description, priority, status, scheduledAt, agent, channel } = req.body;
+    
+    if (!title || title.trim().length === 0) {
+      return res.status(400).json({ error: "Titel ist erforderlich" });
+    }
+    if (title.length > 200) {
+      return res.status(400).json({ error: "Titel zu lang (max 200 Zeichen)" });
+    }
+    
+    const job = jobStore.create({
+      title: title.trim(),
+      description: description?.trim() || "",
+      priority: priority || "medium",
+      status: status || "backlog",
+      scheduledAt: scheduledAt || null,
+      agent: agent || "main",
+      channel: channel || null,
+    });
+    
+    res.status(201).json(job);
+  } catch (err) {
+    res.status(500).json({ error: "Job konnte nicht erstellt werden", detail: err.message });
+  }
+});
+
+// Update job
+api.put("/jobs/:id", sensitiveLimiter, (req, res) => {
+  try {
+    const job = jobStore.update(req.params.id, req.body);
+    res.json(job);
+  } catch (err) {
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    res.status(500).json({ error: "Job konnte nicht aktualisiert werden", detail: err.message });
+  }
+});
+
+// Delete job
+api.delete("/jobs/:id", sensitiveLimiter, (req, res) => {
+  try {
+    jobStore.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    res.status(500).json({ error: "Job konnte nicht gelöscht werden", detail: err.message });
+  }
+});
+
+// Get job result
+api.get("/jobs/:id/result", (req, res) => {
+  try {
+    const result = jobStore.getResult(req.params.id);
+    if (result === null) {
+      return res.status(404).json({ error: "Ergebnis nicht gefunden" });
+    }
+    res.type("text/plain").send(result);
+  } catch (err) {
+    res.status(500).json({ error: "Ergebnis nicht ladbar", detail: err.message });
+  }
+});
+
+// Move job to different status (convenience endpoint)
+api.post("/jobs/:id/move", sensitiveLimiter, (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!status || !Object.values(JobStatus).includes(status)) {
+      return res.status(400).json({ error: "Ungültiger Status" });
+    }
+    
+    const job = jobStore.update(req.params.id, { status });
+    res.json(job);
+  } catch (err) {
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+    res.status(500).json({ error: "Job konnte nicht verschoben werden", detail: err.message });
+  }
+});
+
+// Get queue status
+api.get("/jobs/queue/status", (req, res) => {
+  try {
+    const stats = jobStore.getStats();
+    const nextJob = jobStore.getNextInQueue();
+    res.json({ 
+      ...stats, 
+      nextJobId: nextJob?.id || null,
+      nextJobTitle: nextJob?.title || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Queue-Status nicht ladbar", detail: err.message });
+  }
+});
+
 app.use("/api", api);
 
 // ── WebSocket Proxy ───────────────────────────────────────
@@ -450,6 +580,36 @@ const wss = new WebSocketServer({ noServer: true });
 let wsConnectionsActive = 0;
 let wsMessagesTotal = 0;
 let wsErrorsTotal = 0;
+
+// ── Job Events Broadcast ──────────────────────────────────
+// Alle verbundenen Dashboard-Clients
+const dashboardClients = new Set();
+
+// Broadcast Job-Events an alle Clients
+function broadcastJobEvent(event, job) {
+  const message = JSON.stringify({
+    type: "event",
+    event: event,
+    payload: job,
+    timestamp: new Date().toISOString(),
+  });
+  
+  for (const ws of dashboardClients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(message);
+      } catch (err) {
+        console.error("[WS] Broadcast error:", err.message);
+      }
+    }
+  }
+}
+
+// Subscribe to JobStore events
+jobStore.subscribe((event, job) => {
+  console.log(`[JobStore] Event: ${event}`, job?.id || "");
+  broadcastJobEvent(event, job);
+});
 
 server.on("upgrade", (request, socket, head) => {
   // Nur /ws Pfad akzeptieren
@@ -488,6 +648,7 @@ server.on("upgrade", (request, socket, head) => {
 
 wss.on("connection", (clientWs, request) => {
   wsConnectionsActive++;
+  dashboardClients.add(clientWs);
   console.log(`[WS] Dashboard-Client verbunden (active: ${wsConnectionsActive})`);
 
   // Verbindung zum OpenClaw Gateway aufbauen (kein Token in URL — kommt im connect-Frame)
@@ -687,6 +848,7 @@ wss.on("connection", (clientWs, request) => {
 
   clientWs.on("close", () => {
     wsConnectionsActive--;
+    dashboardClients.delete(clientWs);
     console.log(`[WS] Dashboard-Client getrennt (active: ${wsConnectionsActive})`);
     cleanup();
     if (gatewayWs.readyState === WebSocket.OPEN) {
