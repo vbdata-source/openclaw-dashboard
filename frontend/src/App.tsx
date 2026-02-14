@@ -242,17 +242,21 @@ function DroppableLane({ id, children, isHighlighted }: { id: string; children: 
 }
 
 // ── Job Detail Modal ──────────────────────────────────────
-function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext }: {
+function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext, onUpdate }: {
   job: Job;
   onClose: () => void;
   onMove: (id: string, s: JobStatus) => void;
   onDelete: (id: string) => void;
   onAddContext?: (id: string, context: string) => void;
+  onUpdate?: (id: string, updates: Partial<Job>) => void;
 }) {
   const [fullResult, setFullResult] = useState<string | null>(null);
   const [loadingResult, setLoadingResult] = useState(false);
   const [additionalContext, setAdditionalContext] = useState("");
   const [submittingContext, setSubmittingContext] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: job.title, description: job.description, priority: job.priority });
+  const [saving, setSaving] = useState(false);
 
   // Vollständiges Ergebnis automatisch laden wenn URL vorhanden
   useEffect(() => {
@@ -293,11 +297,70 @@ function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext }: {
         </div>
 
         <div className="oc-modal-content">
-          {/* Beschreibung / Task */}
-          <div className="oc-modal-section">
-            <h3>📝 Aufgabe</h3>
-            <div className="oc-modal-task">{job.description || "(Keine Beschreibung)"}</div>
-          </div>
+          {/* Edit Mode für Backlog Jobs */}
+          {job.status === "backlog" && editing ? (
+            <div className="oc-modal-section oc-edit-section">
+              <h3>✏️ Job bearbeiten</h3>
+              <div className="oc-edit-form">
+                <label>Titel</label>
+                <input 
+                  type="text" 
+                  value={editForm.title} 
+                  onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  className="oc-edit-input"
+                />
+                <label>Beschreibung</label>
+                <textarea 
+                  value={editForm.description} 
+                  onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  className="oc-edit-textarea"
+                  rows={6}
+                />
+                <label>Priorität</label>
+                <select 
+                  value={editForm.priority} 
+                  onChange={(e) => setEditForm(f => ({ ...f, priority: e.target.value as JobPriority }))}
+                  className="oc-edit-select"
+                >
+                  <option value="low">🟢 Niedrig</option>
+                  <option value="medium">🟡 Mittel</option>
+                  <option value="high">🟠 Hoch</option>
+                  <option value="critical">🔴 Kritisch</option>
+                </select>
+                <div className="oc-edit-actions">
+                  <button 
+                    className="oc-edit-save"
+                    disabled={saving || !editForm.title.trim()}
+                    onClick={async () => {
+                      if (!onUpdate) return;
+                      setSaving(true);
+                      try {
+                        await onUpdate(job.id, editForm);
+                        setEditing(false);
+                      } catch (err) {
+                        console.error("Save failed:", err);
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    {saving ? "⏳ Speichern..." : "💾 Speichern"}
+                  </button>
+                  <button className="oc-edit-cancel" onClick={() => { setEditing(false); setEditForm({ title: job.title, description: job.description, priority: job.priority }); }}>
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Beschreibung / Task */}
+              <div className="oc-modal-section">
+                <h3>📝 Aufgabe {job.status === "backlog" && <button className="oc-edit-btn" onClick={() => setEditing(true)}>✏️ Bearbeiten</button>}</h3>
+                <div className="oc-modal-task">{job.description || "(Keine Beschreibung)"}</div>
+              </div>
+            </>
+          )}
 
           {/* Ergebnis (nicht bei pending, da Frage in eigener Sektion) */}
           {(job.result || fullResult || job.resultUrl) && job.status !== "pending" && (
@@ -441,12 +504,13 @@ function JobCardOverlay({ job }: { job: Job }) {
 }
 
 // ── Kanban Board mit Drag & Drop ──────────────────────────
-function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, loading }: {
+function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, onUpdate, loading }: {
   jobs: Job[];
   onMove: (id: string, s: JobStatus) => void;
   onAdd: (j: Omit<Job, "id" | "createdAt" | "updatedAt" | "history">) => void;
   onDelete: (id: string) => void;
   onAddContext: (id: string, context: string) => void;
+  onUpdate: (id: string, updates: Partial<Job>) => void;
   loading?: boolean;
 }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -638,6 +702,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete, onAddContext, loading }: {
           onMove={onMove}
           onDelete={onDelete}
           onAddContext={onAddContext}
+          onUpdate={onUpdate}
         />
       )}
     </div>
@@ -1519,6 +1584,20 @@ export default function App() {
     }
   }, []);
 
+  const updateJob = useCallback(async (id: string, updates: Partial<Job>) => {
+    // Optimistic update
+    setJobs((p) => p.map((j) => (j.id === id ? { ...j, ...updates, updatedAt: new Date().toISOString() } : j)));
+    try {
+      await api.jobs.update(id, updates);
+      console.log("[App] Job updated:", id);
+    } catch (err: any) {
+      console.error("[App] Job update failed:", err.message);
+      // Reload jobs on error
+      api.jobs.list().then((res) => setJobs(res.jobs || []));
+      throw err;
+    }
+  }, []);
+
   const updMem = useCallback((id: string, v: string) => setMemory((p) => p.map((m) => (m.id === id ? { ...m, value: v, updatedAt: new Date().toISOString() } : m))), []);
 
   const addMem = useCallback((e: Omit<MemoryEntry, "id" | "updatedAt">) => setMemory((p) => [...p, { ...e, id: `m${Date.now()}`, updatedAt: new Date().toISOString() }]), []);
@@ -1563,7 +1642,7 @@ export default function App() {
       </nav>
       <main className="oc-main">
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
-        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} loading={dataLoading} />}
+        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
         {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
         {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
