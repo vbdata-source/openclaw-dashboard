@@ -2,6 +2,9 @@
 
 Management-UI für OpenClaw — Job Board, Memory Editor, Session Monitor, Config Editor.
 
+> 📖 **Ausführliche Deployment-Dokumentation:** [DEPLOYMENT.md](./DEPLOYMENT.md)  
+> Beschreibt die Architektur, Neuinstallation, Troubleshooting und alle Environment Variables.
+
 ## Architektur
 
 ```
