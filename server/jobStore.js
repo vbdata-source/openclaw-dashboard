@@ -310,12 +310,12 @@ class JobStore {
   saveResult(jobId, content) {
     ensureDirs();
     const resultFile = join(RESULTS_DIR, `${jobId}.txt`);
+    console.log(`[JobStore] Saving result to: ${resultFile} (${content.length} chars)`);
     writeFileSync(resultFile, content, "utf-8");
     
-    const job = this.get(jobId);
-    if (job) {
-      this.update(jobId, { resultUrl: `/api/jobs/${jobId}/result` });
-    }
+    const resultUrl = `/api/jobs/${jobId}/result`;
+    console.log(`[JobStore] Setting resultUrl: ${resultUrl}`);
+    this.update(jobId, { resultUrl });
     
     return resultFile;
   }
