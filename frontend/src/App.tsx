@@ -1450,6 +1450,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     text: "",
     sessionTarget: "main" as "main" | "isolated",
     enabled: true,
+    deliver: false,
+    deliverChannel: "telegram",
   });
 
   // Form für neuen Job öffnen
@@ -1462,10 +1464,12 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       everyMs: 3600000,
       atDateTime: "",
       timezone: "Europe/Vienna",
-      payloadKind: "systemEvent",
+      payloadKind: "agentTurn",
       text: "",
-      sessionTarget: "main",
+      sessionTarget: "isolated",
       enabled: true,
+      deliver: true,
+      deliverChannel: "telegram",
     });
     setShowForm(true);
   };
@@ -1484,6 +1488,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       text: job.payload.text || job.payload.message || "",
       sessionTarget: job.sessionTarget,
       enabled: job.enabled,
+      deliver: job.payload.deliver || false,
+      deliverChannel: job.payload.channel || "telegram",
     });
     setShowForm(true);
   };
@@ -1525,12 +1531,18 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
 
+    const payload = form.payloadKind === "systemEvent" 
+      ? { kind: "systemEvent" as const, text: form.text }
+      : { 
+          kind: "agentTurn" as const, 
+          message: form.text,
+          ...(form.deliver && { deliver: true, channel: form.deliverChannel }),
+        };
+
     const jobData = {
       name: form.name || undefined,
       schedule,
-      payload: form.payloadKind === "systemEvent" 
-        ? { kind: "systemEvent" as const, text: form.text }
-        : { kind: "agentTurn" as const, message: form.text },
+      payload,
       sessionTarget: form.payloadKind === "systemEvent" ? "main" as const : "isolated" as const,
       enabled: form.enabled,
     };
@@ -1713,6 +1725,34 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               Aktiviert
             </label>
           </div>
+
+          {/* Delivery-Optionen für Agent Turn */}
+          {form.payloadKind === "agentTurn" && (
+            <div className="oc-add-row oc-deliver-row">
+              <label className="oc-checkbox-label">
+                <input 
+                  type="checkbox" 
+                  checked={form.deliver} 
+                  onChange={(e) => setForm({ ...form, deliver: e.target.checked })}
+                />
+                📤 Ergebnis senden an:
+              </label>
+              {form.deliver && (
+                <select 
+                  className="oc-input oc-select" 
+                  value={form.deliverChannel} 
+                  onChange={(e) => setForm({ ...form, deliverChannel: e.target.value })}
+                  style={{ width: 140 }}
+                >
+                  <option value="telegram">Telegram</option>
+                  <option value="discord">Discord</option>
+                  <option value="slack">Slack</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="signal">Signal</option>
+                </select>
+              )}
+            </div>
+          )}
 
           <textarea 
             className="oc-input oc-textarea" 
