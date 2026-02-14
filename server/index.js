@@ -479,6 +479,35 @@ api.delete("/cron/:id", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Cron Test Run (manuell ausführen) ─────────────────────
+api.post("/cron/:id/test", sensitiveLimiter, async (req, res) => {
+  try {
+    const { channel, message } = req.body;
+    
+    if (!channel || !message) {
+      return res.status(400).json({ error: "channel und message erforderlich" });
+    }
+    
+    // Wake-Event senden der den Agent auffordert eine Nachricht zu senden
+    const wakeText = `[CRON-TEST] Bitte sende folgende Nachricht an ${channel}: "${message}"`;
+    
+    const data = await gatewayFetch("/__openclaw__/wake", {
+      method: "POST",
+      body: JSON.stringify({
+        text: wakeText,
+        mode: "now",
+      }),
+    });
+    
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(502).json({ 
+      error: "Test konnte nicht ausgelöst werden", 
+      detail: err.message 
+    });
+  }
+});
+
 // ── System Events ─────────────────────────────────────────
 api.get("/events", async (req, res) => {
   try {

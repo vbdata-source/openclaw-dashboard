@@ -1602,11 +1602,22 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         const message = job.payload.message || job.payload.text || "";
         
         if (job.payload.deliver && job.payload.channel) {
-          // Direkt Nachricht an Channel senden
-          await request("message.send", {
-            channel: job.payload.channel,
-            message: `🧪 [Test] ${message}`,
+          // Test über Dashboard Backend API senden
+          const res = await fetch(`/api/cron/${id}/test`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              channel: job.payload.channel,
+              message: message,
+            }),
           });
+          
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "Unbekannter Fehler" }));
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          
           alert("✅ Test-Nachricht wurde gesendet!");
         } else if (job.payload.kind === "systemEvent") {
           // System Event über cron.wake senden
