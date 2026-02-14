@@ -340,9 +340,9 @@ class JobExecutor {
     
     const text = typeof result === "string" ? result : JSON.stringify(result);
     
-    // Erste 200 Zeichen als Zusammenfassung
-    if (text.length > 200) {
-      return text.slice(0, 197) + "...";
+    // Erste 1000 Zeichen als Zusammenfassung (für Modal-Ansicht)
+    if (text.length > 1000) {
+      return text.slice(0, 997) + "...";
     }
     return text;
   }
