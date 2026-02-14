@@ -624,35 +624,92 @@ function ChatView({ request, events }: {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Listen for chat events
+  // Listen for gateway events (agent + chat)
   useEffect(() => {
     const latest = events[0];
     if (!latest) return;
     
-    // Handle chat response events
-    if (latest.type === "chat" || latest.event?.startsWith("chat")) {
-      const payload = latest.payload || latest;
+    const eventName = latest.event || latest.type;
+    const payload = latest.payload || latest;
+    
+    // Debug logging
+    console.log("[Chat] Event:", eventName, payload);
+    
+    // ─── AGENT Events (streaming) ───────────────────────────
+    if (eventName === "agent") {
+      const stream = payload.stream;
+      const data = payload.data || {};
       
-      // Streaming text
-      if (payload.delta || payload.text) {
+      // Text delta from assistant
+      if (stream === "assistant" && typeof data.text === "string") {
         setMessages(prev => {
           const lastMsg = prev[prev.length - 1];
           if (lastMsg?.pending && lastMsg.role === "assistant") {
             return [...prev.slice(0, -1), {
               ...lastMsg,
-              content: lastMsg.content + (payload.delta || payload.text || ""),
+              content: lastMsg.content + data.text,
             }];
           }
           return prev;
         });
       }
       
-      // Completion
-      if (payload.done || payload.finished || latest.event === "chat.done") {
+      // Lifecycle events (end/error)
+      if (stream === "lifecycle") {
+        const phase = data.phase;
+        if (phase === "end" || phase === "error") {
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg?.pending) {
+              const content = phase === "error" && data.error
+                ? lastMsg.content + `\n\n❌ ${data.error}`
+                : lastMsg.content;
+              return [...prev.slice(0, -1), { ...lastMsg, content, pending: false }];
+            }
+            return prev;
+          });
+          setSending(false);
+        }
+      }
+    }
+    
+    // ─── CHAT Events (final messages) ───────────────────────
+    if (eventName === "chat") {
+      const state = payload.state;
+      
+      // Final message
+      if (state === "final" && payload.message) {
+        const msgContent = payload.message.content;
+        const text = Array.isArray(msgContent)
+          ? msgContent.map((c: any) => c.text || "").join("")
+          : (typeof msgContent === "string" ? msgContent : "");
+        
+        if (text) {
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg?.pending && lastMsg.role === "assistant") {
+              return [...prev.slice(0, -1), {
+                ...lastMsg,
+                content: text,
+                pending: false,
+              }];
+            }
+            return prev;
+          });
+        }
+        setSending(false);
+      }
+      
+      // Error state
+      if (state === "error") {
         setMessages(prev => {
           const lastMsg = prev[prev.length - 1];
           if (lastMsg?.pending) {
-            return [...prev.slice(0, -1), { ...lastMsg, pending: false }];
+            return [...prev.slice(0, -1), {
+              ...lastMsg,
+              content: lastMsg.content + `\n\n❌ ${payload.errorMessage || "Fehler"}`,
+              pending: false,
+            }];
           }
           return prev;
         });
