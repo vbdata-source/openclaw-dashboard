@@ -106,7 +106,7 @@ export const memory = {
     }),
   // Memory Folder (memory/*.md)
   listFolder: () =>
-    request<{ files: string[] }>("/memory/folder"),
+    request<{ files: { name: string; size: number }[] }>("/memory/folder"),
   getFolderFile: (filename: string) =>
     request<{ filename: string; content: string }>(`/memory/folder/${filename}`),
   updateFolderFile: (filename: string, content: string) =>

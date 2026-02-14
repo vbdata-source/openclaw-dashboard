@@ -789,7 +789,7 @@ const WORKSPACE_FILES = [
 
 function WorkspaceFilesEditor({ loading: initialLoading }: { loading?: boolean }) {
   const [files, setFiles] = useState<Record<string, string>>({});
-  const [folderFiles, setFolderFiles] = useState<string[]>([]);
+  const [folderFiles, setFolderFiles] = useState<{ name: string; size: number }[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -902,16 +902,17 @@ function WorkspaceFilesEditor({ loading: initialLoading }: { loading?: boolean }
           ) : (
             <>
               {folderFiles.length === 0 && <div className="oc-empty">Keine Dateien in memory/</div>}
-              {folderFiles.map(filename => (
+              {folderFiles.map(file => (
                 <div 
-                  key={filename}
-                  className={`oc-file-item ${selectedFile === filename ? "oc-file-item--active" : ""}`}
-                  onClick={() => openFile(filename, true)}
+                  key={file.name}
+                  className={`oc-file-item ${selectedFile === file.name ? "oc-file-item--active" : ""}`}
+                  onClick={() => openFile(file.name, true)}
                 >
                   <span className="oc-file-icon">📝</span>
                   <div className="oc-file-info">
-                    <span className="oc-file-name">{filename}</span>
+                    <span className="oc-file-name">{file.name}</span>
                   </div>
+                  <span className="oc-file-size">{(file.size / 1024).toFixed(1)}k</span>
                 </div>
               ))}
             </>
