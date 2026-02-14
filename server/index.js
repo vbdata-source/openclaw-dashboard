@@ -30,6 +30,8 @@ const config = {
   gatewayWs: process.env.OPENCLAW_GATEWAY_URL || "ws://localhost:18789",
   gatewayHttp: process.env.OPENCLAW_GATEWAY_HTTP || "http://localhost:18789",
   gatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN || "",
+  workspaceApiUrl: process.env.WORKSPACE_API_URL || "", // z.B. http://192.168.1.x:18790
+  workspaceApiToken: process.env.WORKSPACE_API_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || "",
   dashboardSecret: process.env.DASHBOARD_SECRET || "",
   sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || "480"), // Minuten
   nodeEnv: process.env.NODE_ENV || "development",
@@ -393,66 +395,78 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Memory / Workspace Files ──────────────────────────────
-const WORKSPACE_DIR = process.env.OPENCLAW_WORKSPACE || "/home/node/.openclaw/workspace";
 const ALLOWED_FILES = ["MEMORY.md", "IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "AGENTS.md"];
+
+// Helper für Workspace API Requests
+async function workspaceFetch(path, options = {}) {
+  if (!config.workspaceApiUrl) {
+    throw new Error("WORKSPACE_API_URL nicht konfiguriert");
+  }
+  
+  const url = `${config.workspaceApiUrl}${path}`;
+  const headers = {
+    "Content-Type": "application/json",
+    ...(config.workspaceApiToken && {
+      Authorization: `Bearer ${config.workspaceApiToken}`,
+    }),
+    ...options.headers,
+  };
+
+  const response = await fetch(url, { ...options, headers });
+  
+  if (!response.ok) {
+    const text = await response.text().catch(() => "Unknown error");
+    throw new Error(`Workspace API ${response.status}: ${text}`);
+  }
+  
+  return response.json();
+}
 
 api.get("/memory", async (req, res) => {
   try {
-    // Liste der Workspace-Dateien zurückgeben
-    const files = readdirSync(WORKSPACE_DIR).filter(f => f.endsWith(".md"));
-    res.json({ files });
+    const data = await workspaceFetch("/files");
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ error: "Memory konnte nicht geladen werden", detail: err.message });
+    res.status(502).json({ error: "Memory konnte nicht geladen werden", detail: err.message });
   }
 });
 
 api.get("/memory/files/:filename", async (req, res) => {
   try {
-    // Pfad-Normalisierung (Security!)
     const filename = basename(decodeURIComponent(req.params.filename));
-
     if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
     
-    const filePath = join(WORKSPACE_DIR, filename);
-    if (!existsSync(filePath)) {
-      return res.json({ filename, content: "" });
-    }
-    
-    const content = readFileSync(filePath, "utf-8");
-    res.json({ filename, content });
+    const data = await workspaceFetch(`/files/${filename}`);
+    res.json({ filename, content: data.content || "" });
   } catch (err) {
-    res.status(500).json({ error: "Datei nicht lesbar", detail: err.message });
+    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
   }
 });
 
 api.put("/memory/files/:filename", sensitiveLimiter, async (req, res) => {
   try {
-    // Pfad-Normalisierung (Security!)
     const filename = basename(decodeURIComponent(req.params.filename));
-
     if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
     
-    const filePath = join(WORKSPACE_DIR, filename);
-    writeFileSync(filePath, req.body.content, "utf-8");
+    await workspaceFetch(`/files/${filename}`, {
+      method: "PUT",
+      body: JSON.stringify({ content: req.body.content }),
+    });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: "Datei nicht schreibbar", detail: err.message });
+    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
   }
 });
 
 // ── Memory Folder (memory/*.md) ───────────────────────────
 api.get("/memory/folder", async (req, res) => {
   try {
-    const memoryDir = join(WORKSPACE_DIR, "memory");
-    if (!existsSync(memoryDir)) {
-      return res.json({ files: [] });
-    }
-    const files = readdirSync(memoryDir).filter(f => f.endsWith(".md")).sort().reverse();
-    res.json({ files });
+    const data = await workspaceFetch("/memory");
+    res.json(data);
   } catch (err) {
     res.json({ files: [] });
   }
@@ -461,20 +475,14 @@ api.get("/memory/folder", async (req, res) => {
 api.get("/memory/folder/:filename", async (req, res) => {
   try {
     const filename = basename(decodeURIComponent(req.params.filename));
-    // Nur .md Dateien erlauben
     if (!filename.endsWith(".md")) {
       return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
     }
     
-    const filePath = join(WORKSPACE_DIR, "memory", filename);
-    if (!existsSync(filePath)) {
-      return res.json({ filename, content: "" });
-    }
-    
-    const content = readFileSync(filePath, "utf-8");
-    res.json({ filename, content });
+    const data = await workspaceFetch(`/memory/${filename}`);
+    res.json({ filename, content: data.content || "" });
   } catch (err) {
-    res.status(500).json({ error: "Datei nicht lesbar", detail: err.message });
+    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
   }
 });
 
@@ -485,16 +493,13 @@ api.put("/memory/folder/:filename", sensitiveLimiter, async (req, res) => {
       return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
     }
     
-    const memoryDir = join(WORKSPACE_DIR, "memory");
-    if (!existsSync(memoryDir)) {
-      mkdirSync(memoryDir, { recursive: true });
-    }
-    
-    const filePath = join(memoryDir, filename);
-    writeFileSync(filePath, req.body.content, "utf-8");
+    await workspaceFetch(`/memory/${filename}`, {
+      method: "PUT",
+      body: JSON.stringify({ content: req.body.content }),
+    });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: "Datei nicht schreibbar", detail: err.message });
+    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
   }
 });
 
