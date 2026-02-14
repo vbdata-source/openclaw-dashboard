@@ -208,9 +208,9 @@ function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete, onOpenD
         {job.estimatedTokens && <span className="oc-tok">~{(job.estimatedTokens / 1000).toFixed(1)}k</span>}
         <span className="oc-time">{timeAgo(job.updatedAt)}</span>
       </div>
-      {job.error && <div className="oc-result oc-result--err">❌ {job.error}</div>}
-      {job.result && !job.error && <div className={`oc-result ${job.status === "failed" ? "oc-result--err" : ""}`}>{job.result}</div>}
-      {job.resultUrl && <a href={job.resultUrl} target="_blank" rel="noopener" className="oc-result-link" onClick={(e) => e.stopPropagation()}>📄 Ergebnis ansehen</a>}
+      {job.error && <div className="oc-result oc-result--err">❌ {job.error.slice(0, 80)}{job.error.length > 80 ? "..." : ""}</div>}
+      {job.result && !job.error && <div className="oc-result-preview">✅ Ergebnis vorhanden</div>}
+      {job.status === "pending" && <div className="oc-result-preview oc-result-preview--pending">❓ Rückfrage offen</div>}
       {expanded === job.id && (
         <div className="oc-card-actions" onClick={(e) => e.stopPropagation()}>
           <button className="oc-detail-btn" onClick={() => onOpenDetail(job)}>🔍 Details</button>

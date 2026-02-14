@@ -85,7 +85,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-result-link:hover{background:rgba(59,130,246,0.2)}
 .oc-input-label{color:var(--tx);font-size:13px}
 .oc-lane-body:empty::after{content:"Hierher ziehen";display:flex;align-items:center;justify-content:center;height:60px;border:2px dashed var(--bd);border-radius:var(--r);color:var(--txd);font-size:12px}
-.oc-card{background:var(--s2);border:1px solid var(--bds);border-radius:var(--r);padding:9px 11px;cursor:grab;transition:all .12s;touch-action:none}
+.oc-card{background:var(--s3);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px;cursor:grab;transition:all .12s;touch-action:none;box-shadow:0 2px 4px rgba(0,0,0,0.3)}
 .oc-card--dragging{opacity:.5;cursor:grabbing;border-color:var(--ac);box-shadow:0 0 0 2px var(--acg)}
 .oc-card--overlay{background:var(--s2);border:2px solid var(--ac);border-radius:var(--r);padding:9px 11px;box-shadow:0 8px 32px rgba(0,0,0,.4);transform:rotate(3deg);cursor:grabbing}
 .oc-card:hover{border-color:var(--bd);background:var(--s3)}
@@ -98,6 +98,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-tok{color:var(--ylw)}
 .oc-result{margin-top:5px;padding:5px 7px;background:rgba(34,197,94,0.08);border-left:2px solid var(--grn);border-radius:0 3px 3px 0;font-size:11px;color:var(--grn)}
 .oc-result--err{background:rgba(239,68,68,0.08);border-left-color:var(--red);color:var(--red)}
+.oc-result-preview{margin-top:5px;padding:4px 8px;background:rgba(34,197,94,0.1);border-radius:4px;font-size:11px;color:var(--grn);font-weight:500}
+.oc-result-preview--pending{background:rgba(168,85,247,0.1);color:#a855f7}
 .oc-card-actions{margin-top:7px;padding-top:7px;border-top:1px solid var(--bds)}
 .oc-move-btns{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
 .oc-move-btn{font-family:var(--mono);font-size:9.5px;padding:3px 7px;border:1px solid;border-radius:3px;background:transparent;cursor:pointer;transition:all .12s}
