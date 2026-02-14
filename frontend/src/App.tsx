@@ -1595,45 +1595,30 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       // Erst versuchen über cron.run
       const result = await request("cron.run", { jobId: id });
       
-      // Wenn "not-due", dann manuell ausführen
+      // Wenn "not-due", dann manuell über Wake-Event ausführen
       if (result?.ran === false && result?.reason === "not-due") {
-        console.log("[Cron] Job not due, executing manually...");
+        console.log("[Cron] Job not due, executing via wake event...");
         
         const message = job.payload.message || job.payload.text || "";
         
+        // Wake-Event an den Agent senden der dann die Aktion ausführt
+        let wakeText: string;
+        
         if (job.payload.deliver && job.payload.channel) {
-          // Test über Dashboard Backend API senden
-          const res = await fetch(`/api/cron/${id}/test`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({
-              channel: job.payload.channel,
-              message: message,
-            }),
-          });
-          
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: "Unbekannter Fehler" }));
-            throw new Error(err.error || `HTTP ${res.status}`);
-          }
-          
-          alert("✅ Test-Nachricht wurde gesendet!");
+          // Agent soll Nachricht an Channel senden
+          wakeText = `[CRON-TEST] Sende diese Nachricht an ${job.payload.channel}: "🧪 ${message}"`;
         } else if (job.payload.kind === "systemEvent") {
-          // System Event über cron.wake senden
-          await request("cron.wake", { 
-            text: message,
-            mode: "now" 
-          });
-          alert("✅ System Event wurde gesendet!");
+          wakeText = message;
         } else {
-          // Fallback: Wake Event
-          await request("cron.wake", { 
-            text: `[Cron Test] ${message}`,
-            mode: "now" 
-          });
-          alert("✅ Wake Event wurde gesendet!");
+          wakeText = `[Cron Test] ${message}`;
         }
+        
+        await request("cron.wake", { 
+          text: wakeText,
+          mode: "now" 
+        });
+        
+        alert("✅ Test wurde an Agent gesendet!");
       } else {
         alert("✅ Job wurde ausgelöst!");
       }
