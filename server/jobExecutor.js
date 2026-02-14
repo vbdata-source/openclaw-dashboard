@@ -267,19 +267,36 @@ class JobExecutor {
       // Task an Gateway senden
       const result = await this.runAgentTask(job);
 
-      // Job erfolgreich abgeschlossen
-      jobStore.update(job.id, {
-        status: JobStatus.DONE,
-        result: this.summarizeResult(result),
-        historyMessage: "Job erfolgreich abgeschlossen",
-      });
+      // Prüfen ob das Ergebnis eine Rückfrage ist
+      if (this.isQuestionResult(result)) {
+        // Job pausieren - wartet auf User-Input
+        const cleanedResult = this.cleanQuestionResult(result);
+        jobStore.update(job.id, {
+          status: JobStatus.PENDING,
+          result: cleanedResult,
+          historyMessage: "Rückfrage - wartet auf Antwort",
+        });
 
-      // Vollständiges Ergebnis speichern
-      if (result) {
-        jobStore.saveResult(job.id, typeof result === "string" ? result : JSON.stringify(result, null, 2));
+        if (cleanedResult) {
+          jobStore.saveResult(job.id, cleanedResult);
+        }
+
+        console.log(`[JobExecutor] ❓ Job pending (question): ${job.id}`);
+      } else {
+        // Job erfolgreich abgeschlossen
+        jobStore.update(job.id, {
+          status: JobStatus.DONE,
+          result: this.summarizeResult(result),
+          historyMessage: "Job erfolgreich abgeschlossen",
+        });
+
+        // Vollständiges Ergebnis speichern
+        if (result) {
+          jobStore.saveResult(job.id, typeof result === "string" ? result : JSON.stringify(result, null, 2));
+        }
+
+        console.log(`[JobExecutor] ✅ Job completed: ${job.id}`);
       }
-
-      console.log(`[JobExecutor] ✅ Job completed: ${job.id}`);
     } catch (err) {
       console.error(`[JobExecutor] ❌ Job failed: ${job.id}`, err.message);
       
@@ -367,7 +384,23 @@ class JobExecutor {
       message = `⚠️ KRITISCH - Hohe Priorität!\n\n${message}`;
     }
 
+    // Instruktion für Rückfragen
+    message += `\n\n---\n**Wichtig:** Falls du Rückfragen hast oder mehr Informationen brauchst, beginne deine Antwort mit \`[RÜCKFRAGE]\` gefolgt von deiner Frage. Der Job wird dann pausiert bis der User antwortet.`;
+
     return message;
+  }
+
+  // Prüft ob das Ergebnis eine Rückfrage ist
+  isQuestionResult(result) {
+    if (!result || typeof result !== "string") return false;
+    const trimmed = result.trim();
+    return trimmed.startsWith("[RÜCKFRAGE]") || trimmed.startsWith("[RUECKFRAGE]");
+  }
+
+  // Entfernt das [RÜCKFRAGE] Prefix
+  cleanQuestionResult(result) {
+    if (!result) return result;
+    return result.replace(/^\[R[UÜ]CKFRAGE\]\s*/i, "").trim();
   }
 
   summarizeResult(result) {
