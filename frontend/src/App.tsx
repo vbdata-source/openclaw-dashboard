@@ -2,7 +2,7 @@
 // OpenClaw Dashboard — Main App
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "./lib/api";
 import { useGateway, type GatewayStatus, type GatewayEvent } from "./hooks/useGateway";
 
@@ -123,11 +123,12 @@ function timeAgo(d: string): string {
 }
 
 // ── Kanban Board ──────────────────────────────────────────
-function KanbanBoard({ jobs, onMove, onAdd, onDelete }: {
+function KanbanBoard({ jobs, onMove, onAdd, onDelete, loading }: {
   jobs: Job[];
   onMove: (id: string, s: JobStatus) => void;
   onAdd: (j: Omit<Job, "id" | "createdAt" | "updatedAt">) => void;
   onDelete: (id: string) => void;
+  loading?: boolean;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -143,7 +144,7 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete }: {
   return (
     <div className="oc-kanban">
       <div className="oc-section-header">
-        <h2 className="oc-view-title">Job Board</h2>
+        <h2 className="oc-view-title">Job Board {loading && <span className="oc-loading-sm">⏳</span>}</h2>
         <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Neuer Job</button>
       </div>
       {showAdd && (
@@ -209,11 +210,12 @@ function KanbanBoard({ jobs, onMove, onAdd, onDelete }: {
 }
 
 // ── Memory Editor ─────────────────────────────────────────
-function MemoryEditor({ entries, onUpdate, onAdd, onDelete }: {
+function MemoryEditor({ entries, onUpdate, onAdd, onDelete, loading }: {
   entries: MemoryEntry[];
   onUpdate: (id: string, val: string) => void;
   onAdd: (e: Omit<MemoryEntry, "id" | "updatedAt">) => void;
   onDelete: (id: string) => void;
+  loading?: boolean;
 }) {
   const [scope, setScope] = useState<string>("all");
   const [editing, setEditing] = useState<string | null>(null);
@@ -226,7 +228,7 @@ function MemoryEditor({ entries, onUpdate, onAdd, onDelete }: {
   return (
     <div>
       <div className="oc-section-header">
-        <h2 className="oc-view-title">Memory & Identity</h2>
+        <h2 className="oc-view-title">Memory & Identity {loading && <span className="oc-loading-sm">⏳</span>}</h2>
         <button className="oc-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Eintrag</button>
       </div>
       {showAdd && (
@@ -256,7 +258,7 @@ function MemoryEditor({ entries, onUpdate, onAdd, onDelete }: {
       </div>
       <div className="oc-mem-grid">
         {filtered.map((entry) => {
-          const s = SCOPE_CFG[entry.scope];
+          const s = SCOPE_CFG[entry.scope] || SCOPE_CFG.user;
           return (
             <div key={entry.id} className="oc-mem-card">
               <div className="oc-mem-top">
@@ -284,14 +286,14 @@ function MemoryEditor({ entries, onUpdate, onAdd, onDelete }: {
             </div>
           );
         })}
-        {filtered.length === 0 && <div className="oc-empty" style={{ gridColumn: "1/-1" }}>Keine Einträge</div>}
+        {filtered.length === 0 && <div className="oc-empty" style={{ gridColumn: "1/-1" }}>{loading ? "Lade Memory..." : "Keine Einträge"}</div>}
       </div>
     </div>
   );
 }
 
 // ── Session Monitor ───────────────────────────────────────
-function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events: GatewayEvent[] }) {
+function SessionMonitor({ sessions, events, loading }: { sessions: SessionEntry[]; events: GatewayEvent[]; loading?: boolean }) {
   const total = sessions.reduce((s, x) => s + x.tokens, 0);
   const msgs = sessions.reduce((s, x) => s + x.messages, 0);
   const active = sessions.filter((s) => s.status === "active").length;
@@ -309,7 +311,7 @@ function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events
   return (
     <div>
       <div className="oc-section-header">
-        <h2 className="oc-view-title">Live Sessions</h2>
+        <h2 className="oc-view-title">Live Sessions {loading && <span className="oc-loading-sm">⏳</span>}</h2>
         <span className="oc-live-badge"><span className="oc-pulse" /> {active} aktiv</span>
       </div>
       <div className="oc-stats-row">
@@ -321,7 +323,7 @@ function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events
       <div className="oc-session-list">
         {sessions.sort((a, b) => ({ active: 0, idle: 1, completed: 2 }[a.status] ?? 3) - ({ active: 0, idle: 1, completed: 2 }[b.status] ?? 3)).map((s) => {
           const ch = CH[s.channel] || { icon: "📨", color: "#888" };
-          const st = ST[s.status];
+          const st = ST[s.status] || ST.idle;
           const pct = Math.min((s.tokens / 20000) * 100, 100);
           return (
             <div key={s.id} className={`oc-sess-card ${s.status === "active" ? "oc-sess-card--active" : ""}`}>
@@ -334,6 +336,7 @@ function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events
             </div>
           );
         })}
+        {sessions.length === 0 && <div className="oc-empty">{loading ? "Lade Sessions..." : "Keine Sessions"}</div>}
       </div>
       <div className="oc-log-box">
         <h3 className="oc-log-head">Event Log</h3>
@@ -341,8 +344,8 @@ function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events
           {events.slice(0, 50).map((ev, i) => (
             <div key={i} className={`oc-log-row oc-log-row--${ev.level || "info"}`}>
               <span className="oc-log-ts">{new Date(ev.timestamp || Date.now()).toLocaleTimeString("de-AT")}</span>
-              <span className={`oc-log-lvl oc-log-lvl--${ev.level || "info"}`}>{ev.level || ev.type?.split(":")[0] || "info"}</span>
-              <span className="oc-log-msg">{ev.message || ev.type || JSON.stringify(ev).slice(0, 120)}</span>
+              <span className={`oc-log-lvl oc-log-lvl--${ev.level || "info"}`}>{ev.level || ev.event || ev.type?.split(":")[0] || "info"}</span>
+              <span className="oc-log-msg">{ev.message || ev.event || JSON.stringify(ev).slice(0, 120)}</span>
             </div>
           ))}
           {events.length === 0 && <div className="oc-empty">Warte auf Events...</div>}
@@ -353,7 +356,7 @@ function SessionMonitor({ sessions, events }: { sessions: SessionEntry[]; events
 }
 
 // ── Config Editor ─────────────────────────────────────────
-function ConfigEditor({ config, onSave }: { config: any; onSave: (c: any) => void }) {
+function ConfigEditor({ config, onSave, loading }: { config: any; onSave: (c: any) => void; loading?: boolean }) {
   const [json, setJson] = useState("");
   const [jsonMode, setJsonMode] = useState(false);
   const [error, setError] = useState("");
@@ -368,6 +371,13 @@ function ConfigEditor({ config, onSave }: { config: any; onSave: (c: any) => voi
     { key: "plugins", label: "Plugins", icon: "🔌" },
   ];
 
+  // Dynamisch Sektionen aus Config-Keys ableiten
+  const configKeys = Object.keys(config || {});
+  const dynamicSects = configKeys
+    .filter((k) => !SECTS.some((s) => s.key === k))
+    .map((k) => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1), icon: "📄" }));
+  const allSects = [...SECTS, ...dynamicSects];
+
   const openJson = () => { setJson(JSON.stringify(config, null, 2)); setJsonMode(true); setError(""); };
   const saveJson = () => { try { onSave(JSON.parse(json)); setError(""); } catch (e: any) { setError(e.message); } };
 
@@ -379,7 +389,7 @@ function ConfigEditor({ config, onSave }: { config: any; onSave: (c: any) => voi
         {typeof v === "object" && v !== null && !Array.isArray(v) ? (
           <div className="oc-cfg-nested">{renderSection(v, [...path, k])}</div>
         ) : Array.isArray(v) ? (
-          <div className="oc-cfg-list">{v.map((item, i) => <code key={i} className="oc-cfg-list-item">{String(item)}</code>)}</div>
+          <div className="oc-cfg-list">{v.map((item, i) => <code key={i} className="oc-cfg-list-item">{typeof item === "object" ? JSON.stringify(item) : String(item)}</code>)}</div>
         ) : typeof v === "boolean" ? (
           <span className={`oc-cfg-bool ${v ? "oc-cfg-bool--true" : ""}`}>{v ? "true" : "false"}</span>
         ) : (
@@ -392,7 +402,7 @@ function ConfigEditor({ config, onSave }: { config: any; onSave: (c: any) => voi
   return (
     <div>
       <div className="oc-section-header">
-        <h2 className="oc-view-title">Konfiguration</h2>
+        <h2 className="oc-view-title">Konfiguration {loading && <span className="oc-loading-sm">⏳</span>}</h2>
         <div className="oc-mode-toggle">
           <button className={`oc-mode-btn ${!jsonMode ? "oc-mode-btn--on" : ""}`} onClick={() => setJsonMode(false)}>Visuell</button>
           <button className={`oc-mode-btn ${jsonMode ? "oc-mode-btn--on" : ""}`} onClick={openJson}>JSON</button>
@@ -406,67 +416,140 @@ function ConfigEditor({ config, onSave }: { config: any; onSave: (c: any) => voi
       ) : (
         <div className="oc-cfg-layout">
           <div className="oc-cfg-nav">
-            {SECTS.map((s) => (
+            {allSects.map((s) => (
               <button key={s.key} className={`oc-cfg-nav-btn ${section === s.key ? "oc-cfg-nav-btn--on" : ""}`} onClick={() => setSection(s.key)}>
                 <span>{s.icon}</span><span>{s.label}</span>
               </button>
             ))}
           </div>
-          <div className="oc-cfg-content">{config[section] ? renderSection(config[section]) : <div className="oc-empty">Keine Daten</div>}</div>
+          <div className="oc-cfg-content">{config && config[section] ? renderSection(config[section]) : <div className="oc-empty">Keine Daten für "{section}"</div>}</div>
         </div>
       )}
     </div>
   );
 }
 
-// ── Demo Data ─────────────────────────────────────────────
-const DEMO_JOBS: Job[] = [
-  { id: "j1", title: "Täglicher News-Digest", description: "Tech-News sammeln und zusammenfassen", status: "done", priority: "medium", agent: "AJBot", createdAt: "2026-02-13T06:00:00Z", updatedAt: "2026-02-13T06:12:00Z", channel: "whatsapp", estimatedTokens: 4200, result: "12 Artikel zusammengefasst" },
-  { id: "j2", title: "Backup-Status prüfen", description: "Coolify Container Backups überprüfen", status: "running", priority: "high", agent: "AJBot", createdAt: "2026-02-13T08:00:00Z", updatedAt: "2026-02-13T08:02:00Z", channel: "whatsapp", estimatedTokens: 1800 },
-  { id: "j3", title: "KDS Demo vorbereiten", description: "Demo-Daten für Kitchen Display System erstellen", status: "queued", priority: "high", agent: "AJBot", createdAt: "2026-02-13T09:00:00Z", updatedAt: "2026-02-13T09:00:00Z", estimatedTokens: 6000 },
-  { id: "j4", title: "n8n Workflow-Check", description: "Aktive n8n Workflows auf Fehler testen", status: "backlog", priority: "medium", agent: "AJBot", createdAt: "2026-02-12T14:00:00Z", updatedAt: "2026-02-12T14:00:00Z", estimatedTokens: 3200 },
-  { id: "j5", title: "SSL Zertifikate erneuern", description: "Ablaufende SSL Zertifikate prüfen", status: "backlog", priority: "critical", agent: "AJBot", createdAt: "2026-02-12T10:00:00Z", updatedAt: "2026-02-12T10:00:00Z", estimatedTokens: 800 },
-  { id: "j6", title: "M365 Lizenzen auswerten", description: "Überblick M365 Lizenzen erstellen", status: "failed", priority: "medium", agent: "AJBot", createdAt: "2026-02-12T16:00:00Z", updatedAt: "2026-02-12T16:05:00Z", estimatedTokens: 5000, result: "M365 API Token abgelaufen" },
-];
-const DEMO_MEM: MemoryEntry[] = [
-  { id: "m1", key: "name", value: "AJBot", scope: "identity", updatedAt: "2026-02-04T12:00:00Z" },
-  { id: "m2", key: "role", value: "Persönlicher AI-Assistent für vbdata IT-Services", scope: "identity", updatedAt: "2026-02-04T12:00:00Z" },
-  { id: "m3", key: "vibe", value: "Professionell, hilfsbereit, technisch versiert", scope: "soul", updatedAt: "2026-02-04T12:00:00Z" },
-  { id: "m4", key: "owner", value: "Jürgen", scope: "user", updatedAt: "2026-02-04T12:00:00Z" },
-  { id: "m5", key: "company", value: "vbdata IT-Services", scope: "user", updatedAt: "2026-02-04T12:00:00Z" },
-  { id: "m6", key: "language", value: "Deutsch (primär), Englisch (technisch)", scope: "soul", updatedAt: "2026-02-04T12:00:00Z" },
-];
-const DEMO_SESS: SessionEntry[] = [
-  { id: "s1", channel: "whatsapp", sender: "+43 XXX", agent: "AJBot", status: "active", messages: 14, tokens: 8420, startedAt: "2026-02-13T07:45:00Z", lastActivity: "2026-02-13T08:12:00Z" },
-  { id: "s2", channel: "webchat", sender: "Control UI", agent: "AJBot", status: "active", messages: 3, tokens: 1200, startedAt: "2026-02-13T08:00:00Z", lastActivity: "2026-02-13T08:05:00Z" },
-  { id: "s3", channel: "whatsapp", sender: "+43 YYY", agent: "AJBot", status: "idle", messages: 8, tokens: 3100, startedAt: "2026-02-12T14:00:00Z", lastActivity: "2026-02-12T14:30:00Z" },
-];
-const DEMO_CFG = {
-  agents: { defaults: { compaction: { mode: "safeguard" }, maxConcurrent: 4, subagents: { maxConcurrent: 8 } } },
-  channels: { whatsapp: { dmPolicy: "open", allowFrom: ["*"], groupPolicy: "allowlist", mediaMaxMb: 50, debounceMs: 0 } },
-  gateway: { mode: "local", bind: "lan", controlUi: { allowInsecureAuth: true }, trustedProxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] },
-  messages: { ackReactionScope: "group-mentions" },
-  commands: { native: "auto", nativeSkills: "auto" },
-  plugins: { entries: { whatsapp: { enabled: true } } },
-};
+// ── Data Mapping Helpers ──────────────────────────────────
+function mapSessionsResponse(payload: any): SessionEntry[] {
+  // Gateway sessions.list kann verschiedene Formate haben
+  const raw = payload?.sessions || payload?.items || payload || [];
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((s: any, i: number) => {
+    // Session-Key als ID verwenden (z.B. "agent:main:whatsapp:dm:+43...")
+    const key = s.key || s.id || s.sessionKey || `s${i}`;
+    const parts = key.split(":");
+
+    // Channel und Sender aus Session-Key extrahieren
+    const channel = s.channel || parts[2] || "unknown";
+    const sender = s.sender || s.peer || s.from || parts.slice(3).join(":") || key;
+
+    return {
+      id: key,
+      channel,
+      sender,
+      agent: s.agent || s.agentId || parts[1] || "main",
+      status: s.status === "active" || s.active ? "active" : s.status === "idle" ? "idle" : "completed",
+      messages: s.messages || s.messageCount || s.turns || 0,
+      tokens: s.tokens || s.totalTokens || s.tokenCount || 0,
+      startedAt: s.startedAt || s.createdAt || s.created || new Date().toISOString(),
+      lastActivity: s.lastActivity || s.updatedAt || s.lastMessage || s.updated || new Date().toISOString(),
+    } as SessionEntry;
+  });
+}
+
+function mapCronToJobs(payload: any): Job[] {
+  const raw = payload?.jobs || payload?.items || payload || [];
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((j: any, i: number) => ({
+    id: j.id || j.name || `cron-${i}`,
+    title: j.name || j.label || j.title || `Cron Job ${i + 1}`,
+    description: j.description || j.command || j.schedule || "",
+    status: j.enabled === false ? "backlog" : j.running ? "running" : j.lastError ? "failed" : j.lastRun ? "done" : "queued",
+    priority: "medium" as JobPriority,
+    agent: j.agent || j.agentId || "main",
+    createdAt: j.createdAt || j.created || new Date().toISOString(),
+    updatedAt: j.lastRun || j.updatedAt || new Date().toISOString(),
+    channel: j.channel,
+    estimatedTokens: j.estimatedTokens || j.tokens,
+    result: j.lastResult || j.lastError,
+  }));
+}
+
+function mapStatusToMemory(status: any, config: any): MemoryEntry[] {
+  const entries: MemoryEntry[] = [];
+  const now = new Date().toISOString();
+
+  // Bot-Identity aus Config/Status ableiten
+  const assistantName = status?.assistant?.name || config?.agents?.defaults?.name || "AJBot";
+  entries.push({ id: "m-name", key: "name", value: assistantName, scope: "identity", updatedAt: now });
+
+  if (status?.assistant?.avatar) {
+    entries.push({ id: "m-avatar", key: "avatar", value: status.assistant.avatar, scope: "identity", updatedAt: now });
+  }
+
+  // Agents info
+  if (config?.agents) {
+    const model = config.agents?.defaults?.model?.primary || "";
+    if (model) entries.push({ id: "m-model", key: "model", value: model, scope: "identity", updatedAt: now });
+    
+    const workspace = config.agents?.defaults?.workspace || "";
+    if (workspace) entries.push({ id: "m-workspace", key: "workspace", value: workspace, scope: "identity", updatedAt: now });
+  }
+
+  // Gateway info
+  if (config?.gateway) {
+    entries.push({ id: "m-mode", key: "gateway.mode", value: config.gateway.mode || "local", scope: "user", updatedAt: now });
+    entries.push({ id: "m-bind", key: "gateway.bind", value: config.gateway.bind || "loopback", scope: "user", updatedAt: now });
+  }
+
+  // Channels
+  if (config?.channels) {
+    Object.keys(config.channels).forEach((ch, i) => {
+      const chCfg = config.channels[ch];
+      const enabled = chCfg.enabled !== false;
+      entries.push({
+        id: `m-ch-${i}`,
+        key: `channel.${ch}`,
+        value: enabled ? `Aktiv (DM: ${chCfg.dmPolicy || "??"})` : "Deaktiviert",
+        scope: "user",
+        updatedAt: now,
+      });
+    });
+  }
+
+  // Uptime
+  if (status?.uptime) {
+    const h = Math.floor(status.uptime / 3600);
+    const m = Math.floor((status.uptime % 3600) / 60);
+    entries.push({ id: "m-uptime", key: "uptime", value: `${h}h ${m}m`, scope: "user", updatedAt: now });
+  }
+
+  // Version
+  if (status?.version) {
+    entries.push({ id: "m-version", key: "version", value: status.version, scope: "identity", updatedAt: now });
+  }
+
+  return entries;
+}
 
 // ── Main App ──────────────────────────────────────────────
 type View = "kanban" | "memory" | "sessions" | "config";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
-  const [view, setView] = useState<View>("kanban");
-  const [jobs, setJobs] = useState<Job[]>(DEMO_JOBS);
-  const [memory, setMemory] = useState<MemoryEntry[]>(DEMO_MEM);
-  const [sessions] = useState<SessionEntry[]>(DEMO_SESS);
-  const [cfg, setCfg] = useState(DEMO_CFG);
-  const [gwStatus, setGwStatus] = useState<GatewayStatus>("disconnected");
+  const [view, setView] = useState<View>("sessions");
 
-  const { status: wsStatus, events: wsEvents, connect: wsConnect } = useGateway({
+  // Echte Daten (leer initialisiert)
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [memory, setMemory] = useState<MemoryEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [cfg, setCfg] = useState<any>({});
+  const [dataLoading, setDataLoading] = useState(false);
+
+  const { status: wsStatus, events: wsEvents, connect: wsConnect, request: gwRequest } = useGateway({
     autoConnect: authed === true,
-    onEvent: (ev) => {
-      if (ev.type === "gateway:status") setGwStatus(ev.status);
-    },
   });
 
   // Auth check on mount
@@ -477,22 +560,126 @@ export default function App() {
     return () => window.removeEventListener("oc:auth:expired", handler);
   }, []);
 
-  // Load real data when authenticated
+  // ── Echte Daten laden wenn Gateway verbunden ─────────────
+  const dataLoadedRef = useRef(false);
+
   useEffect(() => {
-    if (!authed) return;
-    api.config.get().then(setCfg).catch(() => {});
-    // Sessions und Memory würden hier auch geladen
-  }, [authed]);
+    if (wsStatus !== "connected") {
+      dataLoadedRef.current = false;
+      return;
+    }
+    if (dataLoadedRef.current) return;
+    dataLoadedRef.current = true;
+
+    setDataLoading(true);
+    console.log("[App] Lade Echtdaten vom Gateway...");
+
+    const loadData = async () => {
+      let configData: any = {};
+      let statusData: any = {};
+
+      // 1. Config laden
+      try {
+        const res = await gwRequest("config.get");
+        configData = res?.config || res || {};
+        setCfg(configData);
+        console.log("[App] Config geladen:", Object.keys(configData));
+      } catch (err: any) {
+        console.warn("[App] Config laden fehlgeschlagen:", err.message);
+      }
+
+      // 2. Status/Health laden
+      try {
+        const res = await gwRequest("status");
+        statusData = res || {};
+        console.log("[App] Status geladen:", statusData);
+      } catch {
+        try {
+          const res = await gwRequest("health");
+          statusData = res || {};
+          console.log("[App] Health geladen:", statusData);
+        } catch (err: any) {
+          console.warn("[App] Status/Health fehlgeschlagen:", err.message);
+        }
+      }
+
+      // 3. Sessions laden
+      try {
+        const res = await gwRequest("sessions.list");
+        const mapped = mapSessionsResponse(res);
+        setSessions(mapped);
+        console.log("[App] Sessions geladen:", mapped.length);
+      } catch (err: any) {
+        console.warn("[App] Sessions laden fehlgeschlagen:", err.message);
+      }
+
+      // 4. Cron/Jobs laden
+      try {
+        const res = await gwRequest("cron.list");
+        const mapped = mapCronToJobs(res);
+        setJobs(mapped);
+        console.log("[App] Cron-Jobs geladen:", mapped.length);
+      } catch (err: any) {
+        console.warn("[App] Cron laden fehlgeschlagen:", err.message);
+      }
+
+      // 5. Memory aus Status + Config ableiten
+      const memEntries = mapStatusToMemory(statusData, configData);
+      if (memEntries.length > 0) {
+        setMemory(memEntries);
+        console.log("[App] Memory-Einträge abgeleitet:", memEntries.length);
+      }
+
+      setDataLoading(false);
+    };
+
+    loadData();
+  }, [wsStatus, gwRequest]);
+
+  // ── Live-Event-Updates ─────────────────────────────────
+  useEffect(() => {
+    if (!wsEvents.length) return;
+    const latest = wsEvents[0];
+
+    // Session-Updates live verarbeiten
+    if (latest.event === "session.started" || latest.event === "session.updated") {
+      const s = latest.payload;
+      if (s) {
+        setSessions((prev) => {
+          const key = s.key || s.id || s.sessionKey;
+          const existing = prev.find((x) => x.id === key);
+          const entry = mapSessionsResponse({ sessions: [s] })[0];
+          if (!entry) return prev;
+          if (existing) return prev.map((x) => (x.id === key ? entry : x));
+          return [entry, ...prev];
+        });
+      }
+    }
+
+    if (latest.event === "session.ended" || latest.event === "session.closed") {
+      const key = latest.payload?.key || latest.payload?.id;
+      if (key) {
+        setSessions((prev) =>
+          prev.map((x) => (x.id === key ? { ...x, status: "completed" as const } : x))
+        );
+      }
+    }
+  }, [wsEvents]);
 
   const moveJob = useCallback((id: string, s: JobStatus) => {
     setJobs((p) => p.map((j) => (j.id === id ? { ...j, status: s, updatedAt: new Date().toISOString() } : j)));
   }, []);
+
   const addJob = useCallback((j: Omit<Job, "id" | "createdAt" | "updatedAt">) => {
     setJobs((p) => [...p, { ...j, id: `j${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]);
   }, []);
+
   const delJob = useCallback((id: string) => setJobs((p) => p.filter((j) => j.id !== id)), []);
+
   const updMem = useCallback((id: string, v: string) => setMemory((p) => p.map((m) => (m.id === id ? { ...m, value: v, updatedAt: new Date().toISOString() } : m))), []);
+
   const addMem = useCallback((e: Omit<MemoryEntry, "id" | "updatedAt">) => setMemory((p) => [...p, { ...e, id: `m${Date.now()}`, updatedAt: new Date().toISOString() }]), []);
+
   const delMem = useCallback((id: string) => setMemory((p) => p.filter((m) => m.id !== id)), []);
 
   if (authed === null) return <div className="oc-loading"><span className="oc-loading-logo">🦞</span></div>;
@@ -531,10 +718,10 @@ export default function App() {
         ))}
       </nav>
       <main className="oc-main">
-        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} />}
-        {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} />}
-        {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} />}
-        {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); api.config.update(c).catch(() => {}); }} />}
+        {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} loading={dataLoading} />}
+        {view === "memory" && <MemoryEditor entries={memory} onUpdate={updMem} onAdd={addMem} onDelete={delMem} loading={dataLoading} />}
+        {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} />}
+        {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
       </main>
     </div>
   );
