@@ -390,45 +390,128 @@ server.on("upgrade", (request, socket, head) => {
 wss.on("connection", (clientWs, request) => {
   console.log("[WS] Dashboard-Client verbunden");
 
-  // Verbindung zum OpenClaw Gateway aufbauen
-  const gwUrl = new URL(config.gatewayWs);
-  if (config.gatewayToken) {
-    gwUrl.searchParams.set("token", config.gatewayToken);
-  }
-
-  const gatewayWs = new WebSocket(gwUrl.toString());
+  // Verbindung zum OpenClaw Gateway aufbauen (kein Token in URL — kommt im connect-Frame)
+  const gatewayWs = new WebSocket(config.gatewayWs);
   let gatewayConnected = false;
+  let handshakePhase = true; // true bis hello-ok empfangen
+  let connectTimeout = null;
 
   gatewayWs.on("open", () => {
-    gatewayConnected = true;
-    console.log("[WS] Gateway-Verbindung hergestellt");
+    console.log("[WS] Gateway WS offen, warte auf Challenge...");
 
-    // Subscribe to system events
-    gatewayWs.send(
-      JSON.stringify({
-        type: "subscribe",
-        channels: ["system", "sessions", "agents", "cron"],
-      })
-    );
-
-    // Status an Client senden
-    clientWs.send(
-      JSON.stringify({
-        type: "gateway:status",
-        status: "connected",
-        timestamp: new Date().toISOString(),
-      })
-    );
+    // Fallback: Falls kein Challenge kommt, sende connect nach 2s
+    connectTimeout = setTimeout(() => {
+      if (handshakePhase && gatewayWs.readyState === WebSocket.OPEN) {
+        console.log("[WS] Kein Challenge erhalten, sende connect direkt...");
+        sendConnectFrame();
+      }
+    }, 2000);
   });
 
-  // Gateway → Client
+  function sendConnectFrame() {
+    const connectFrame = {
+      type: "req",
+      method: "connect",
+      id: `dashboard-${Date.now()}`,
+      params: {
+        role: "operator",
+        scopes: [
+          "operator.status",
+          "operator.sessions",
+          "operator.config",
+          "operator.approvals",
+        ],
+        auth: {},
+      },
+    };
+
+    // Token-Auth
+    if (config.gatewayToken) {
+      connectFrame.params.auth.token = config.gatewayToken;
+    }
+
+    console.log("[WS] Sende connect-Frame (role: operator)");
+    gatewayWs.send(JSON.stringify(connectFrame));
+  }
+
+  // Gateway → Client (mit Handshake-Logik)
   gatewayWs.on("message", (data) => {
+    const raw = data.toString();
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      // Kein JSON — weiterleiten falls verbunden
+      if (gatewayConnected && clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(raw);
+      }
+      return;
+    }
+
+    // ── Handshake-Phase ──────────────────────────────────
+    if (handshakePhase) {
+      // 1) Challenge vom Gateway → connect-Frame senden
+      if (msg.type === "event" && msg.event === "connect.challenge") {
+        console.log("[WS] Challenge erhalten, sende connect-Frame...");
+        if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+        sendConnectFrame();
+        return;
+      }
+
+      // 2) hello-ok → Handshake erfolgreich!
+      if (msg.type === "res" && msg.ok === true) {
+        handshakePhase = false;
+        gatewayConnected = true;
+        if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+        console.log("[WS] ✅ Gateway-Handshake erfolgreich (hello-ok)");
+
+        // Status an Dashboard-Client senden
+        clientWs.send(
+          JSON.stringify({
+            type: "gateway:status",
+            status: "connected",
+            timestamp: new Date().toISOString(),
+          })
+        );
+
+        // Health-Request senden um Gateway-Status zu bekommen
+        gatewayWs.send(
+          JSON.stringify({
+            type: "req",
+            method: "health",
+            id: `health-${Date.now()}`,
+          })
+        );
+        return;
+      }
+
+      // 3) Fehler-Response → Handshake fehlgeschlagen
+      if (msg.type === "res" && msg.ok === false) {
+        console.error("[WS] ❌ Gateway-Handshake fehlgeschlagen:", JSON.stringify(msg.error || msg));
+        if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+        clientWs.send(
+          JSON.stringify({
+            type: "gateway:status",
+            status: "error",
+            error: msg.error?.message || "Handshake fehlgeschlagen",
+            timestamp: new Date().toISOString(),
+          })
+        );
+        return;
+      }
+
+      // Unbekannte Handshake-Nachricht loggen
+      console.log("[WS] Handshake-Phase, unerwartete Nachricht:", msg.type, msg.method || msg.event || "");
+      return;
+    }
+
+    // ── Verbundene Phase — Events an Client weiterleiten ──
     if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(data.toString());
+      clientWs.send(raw);
     }
   });
 
-  // Client → Gateway
+  // Client → Gateway (nur wenn verbunden)
   clientWs.on("message", (data) => {
     if (gatewayConnected && gatewayWs.readyState === WebSocket.OPEN) {
       gatewayWs.send(data.toString());
@@ -436,9 +519,11 @@ wss.on("connection", (clientWs, request) => {
   });
 
   // Cleanup
-  gatewayWs.on("close", () => {
+  gatewayWs.on("close", (code, reason) => {
     gatewayConnected = false;
-    console.log("[WS] Gateway-Verbindung getrennt");
+    handshakePhase = true;
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    console.log(`[WS] Gateway-Verbindung getrennt (code=${code}, reason=${reason || "n/a"})`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(
         JSON.stringify({
@@ -456,6 +541,7 @@ wss.on("connection", (clientWs, request) => {
 
   clientWs.on("close", () => {
     console.log("[WS] Dashboard-Client getrennt");
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
     if (gatewayWs.readyState === WebSocket.OPEN) {
       gatewayWs.close();
     }
