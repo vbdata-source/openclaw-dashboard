@@ -607,6 +607,31 @@ api.get("/jobs/:id/result", (req, res) => {
   }
 });
 
+// Add clarification to pending job and requeue
+api.post("/jobs/:id/clarify", sensitiveLimiter, (req, res) => {
+  try {
+    const { context } = req.body;
+    if (!context || !context.trim()) {
+      return res.status(400).json({ error: "Kontext ist erforderlich" });
+    }
+
+    const job = jobStore.get(req.params.id);
+    if (!job) {
+      return res.status(404).json({ error: "Job nicht gefunden" });
+    }
+
+    if (job.status !== JobStatus.PENDING) {
+      return res.status(400).json({ error: "Job ist nicht in Rückfrage-Status" });
+    }
+
+    const updatedJob = jobStore.addClarification(req.params.id, context.trim());
+    res.json(updatedJob);
+  } catch (err) {
+    console.error("[API] Clarify error:", err);
+    res.status(500).json({ error: "Kontext konnte nicht hinzugefügt werden", detail: err.message });
+  }
+});
+
 // Move job to different status (convenience endpoint)
 api.post("/jobs/:id/move", sensitiveLimiter, (req, res) => {
   try {

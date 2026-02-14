@@ -37,6 +37,12 @@ export interface JobHistoryEntry {
   message?: string;
 }
 
+export interface JobClarification {
+  question: string;
+  answer: string;
+  timestamp: string;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -53,6 +59,7 @@ export interface Job {
   result?: string | null;
   resultUrl?: string | null;
   error?: string | null;
+  clarifications?: JobClarification[];
   history: JobHistoryEntry[];
 }
 
@@ -292,8 +299,8 @@ function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext }: {
             <div className="oc-modal-task">{job.description || "(Keine Beschreibung)"}</div>
           </div>
 
-          {/* Ergebnis */}
-          {(job.result || fullResult || job.resultUrl) && (
+          {/* Ergebnis (nicht bei pending, da Frage in eigener Sektion) */}
+          {(job.result || fullResult || job.resultUrl) && job.status !== "pending" && (
             <div className="oc-modal-section">
               <h3>✅ Ergebnis {job.resultUrl && !fullResult && !loadingResult && <button className="oc-load-full-btn" onClick={() => {
                 setLoadingResult(true);
@@ -312,14 +319,39 @@ function JobDetailModal({ job, onClose, onMove, onDelete, onAddContext }: {
             </div>
           )}
 
+          {/* Bisherige Rückfragen */}
+          {job.clarifications && job.clarifications.length > 0 && (
+            <div className="oc-modal-section oc-clarifications-section">
+              <h3>💬 Bisherige Rückfragen ({job.clarifications.length})</h3>
+              <div className="oc-clarifications-list">
+                {job.clarifications.map((c, i) => (
+                  <div key={i} className="oc-clarification-entry">
+                    <div className="oc-clarification-q">
+                      <span className="oc-clarification-icon">❓</span>
+                      <span className="oc-clarification-text">{c.question}</span>
+                    </div>
+                    <div className="oc-clarification-a">
+                      <span className="oc-clarification-icon">✅</span>
+                      <span className="oc-clarification-text">{c.answer}</span>
+                    </div>
+                    <span className="oc-clarification-time">{new Date(c.timestamp).toLocaleString("de-AT")}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Rückfrage - Kontext ergänzen */}
           {job.status === "pending" && (
             <div className="oc-modal-section oc-pending-section">
-              <h3>❓ Rückfrage - Kontext ergänzen</h3>
+              <h3>❓ Aktuelle Rückfrage</h3>
+              {job.result && (
+                <div className="oc-pending-question">{job.result}</div>
+              )}
               <p className="oc-pending-hint">Der Agent braucht weitere Informationen. Ergänze den Kontext und sende den Job erneut.</p>
               <textarea 
                 className="oc-context-input"
-                placeholder="Zusätzliche Informationen eingeben..."
+                placeholder="Deine Antwort eingeben..."
                 value={additionalContext}
                 onChange={(e) => setAdditionalContext(e.target.value)}
                 rows={4}
@@ -1478,24 +1510,14 @@ export default function App() {
 
   const addContextToJob = useCallback(async (id: string, context: string) => {
     try {
-      // Aktualisiere Job-Beschreibung mit zusätzlichem Kontext
-      const job = jobs.find(j => j.id === id);
-      if (!job) return;
-      
-      const updatedDescription = `${job.description}\n\n---\n**Zusätzlicher Kontext:**\n${context}`;
-      
-      // Job aktualisieren und in Warteschlange verschieben
-      await api.jobs.update(id, { 
-        description: updatedDescription,
-        status: "queued" 
-      });
-      
-      console.log("[App] Context added to job:", id);
+      // Neuer strukturierter Endpoint für Clarifications
+      await api.jobs.clarify(id, context);
+      console.log("[App] Clarification added to job:", id);
     } catch (err: any) {
-      console.error("[App] Failed to add context:", err.message);
+      console.error("[App] Failed to add clarification:", err.message);
       throw err;
     }
-  }, [jobs]);
+  }, []);
 
   const updMem = useCallback((id: string, v: string) => setMemory((p) => p.map((m) => (m.id === id ? { ...m, value: v, updatedAt: new Date().toISOString() } : m))), []);
 

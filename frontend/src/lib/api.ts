@@ -149,6 +149,12 @@ export interface JobData {
   channel?: string;
 }
 
+export interface JobClarification {
+  question: string;
+  answer: string;
+  timestamp: string;
+}
+
 export interface Job extends JobData {
   id: string;
   createdAt: string;
@@ -158,6 +164,7 @@ export interface Job extends JobData {
   result?: string | null;
   resultUrl?: string | null;
   estimatedTokens?: number | null;
+  clarifications?: JobClarification[];
   history: Array<{
     timestamp: string;
     status: string;
@@ -206,6 +213,12 @@ export const jobs = {
     request<Job>(`/jobs/${id}/move`, {
       method: "POST",
       body: JSON.stringify({ status }),
+    }),
+  
+  clarify: (id: string, context: string) =>
+    request<Job>(`/jobs/${id}/clarify`, {
+      method: "POST",
+      body: JSON.stringify({ context }),
     }),
   
   getResult: (id: string) =>

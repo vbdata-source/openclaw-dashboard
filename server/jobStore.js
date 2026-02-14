@@ -140,6 +140,7 @@ class JobStore {
       result: null,
       resultUrl: null,
       estimatedTokens: data.estimatedTokens || null,
+      clarifications: [], // Array of { question, answer, timestamp }
       history: [
         { timestamp: now, status: data.status || JobStatus.BACKLOG, message: "Job erstellt" }
       ],
@@ -305,6 +306,55 @@ class JobStore {
     // This will be called by the job executor
     // Just emit an event that the queue should be checked
     this._emit("queue.ready", null);
+  }
+
+  // ── Clarifications ──────────────────────────────────────
+  addClarification(id, answer) {
+    const index = this.jobs.findIndex(j => j.id === id);
+    if (index === -1) {
+      throw new Error(`Job ${id} not found`);
+    }
+
+    const job = this.jobs[index];
+    const now = new Date().toISOString();
+
+    // Initialize clarifications array if missing (for legacy jobs)
+    if (!job.clarifications) {
+      job.clarifications = [];
+    }
+
+    // The last result (when status was pending) is the question
+    const question = job.result || "Rückfrage";
+
+    // Add clarification entry
+    job.clarifications.push({
+      question: question,
+      answer: answer,
+      timestamp: now,
+    });
+
+    job.updatedAt = now;
+    job.history.push({
+      timestamp: now,
+      status: JobStatus.QUEUED,
+      message: `Kontext ergänzt: "${answer.slice(0, 50)}${answer.length > 50 ? '...' : ''}"`,
+    });
+
+    // Move back to queue
+    const oldStatus = job.status;
+    job.status = JobStatus.QUEUED;
+    job.result = null; // Clear the question from result
+
+    // Queue management
+    if (oldStatus !== JobStatus.QUEUED) {
+      this._addToQueue(job);
+    }
+
+    this.jobs[index] = job;
+    saveJobs(this.jobs);
+    this._emit("job.updated", job);
+    
+    return job;
   }
 
   // ── Result Storage ──────────────────────────────────────

@@ -384,6 +384,15 @@ class JobExecutor {
       message = `⚠️ KRITISCH - Hohe Priorität!\n\n${message}`;
     }
 
+    // Bisherige Rückfragen/Antworten einbauen (falls vorhanden)
+    if (job.clarifications && job.clarifications.length > 0) {
+      message += `\n\n---\n**Bisherige Rückfragen und Antworten:**\n`;
+      for (const c of job.clarifications) {
+        message += `\n❓ **Rückfrage:** ${c.question}\n✅ **Antwort:** ${c.answer}\n`;
+      }
+      message += `\n---\n**Bitte fahre mit der Aufgabe fort unter Berücksichtigung der obigen Antworten.**`;
+    }
+
     // Instruktion für Rückfragen
     message += `\n\n---\n**Wichtig:** Falls du Rückfragen hast oder mehr Informationen brauchst, beginne deine Antwort mit \`[RÜCKFRAGE]\` gefolgt von deiner Frage. Der Job wird dann pausiert bis der User antwortet.`;
 
