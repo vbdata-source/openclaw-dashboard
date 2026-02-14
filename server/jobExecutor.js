@@ -100,13 +100,13 @@ class JobExecutor {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
-          id: "dashboard-job-executor",
+          id: "openclaw-control-ui",
           version: "1.0.0",
-          platform: "server",
-          mode: "executor",
+          platform: "linux",
+          mode: "webchat",
         },
         role: "operator",
-        scopes: ["operator.read", "operator.write"],
+        scopes: ["operator.read", "operator.write", "operator.admin"],
         auth: {},
       },
     };
