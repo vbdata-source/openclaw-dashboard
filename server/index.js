@@ -16,7 +16,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "fs";
 import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 import { jobStore, JobStatus } from "./jobStore.js";
@@ -393,14 +393,16 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Memory / Workspace Files ──────────────────────────────
+const WORKSPACE_DIR = process.env.OPENCLAW_WORKSPACE || "/home/node/.openclaw/workspace";
 const ALLOWED_FILES = ["MEMORY.md", "IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "AGENTS.md"];
 
 api.get("/memory", async (req, res) => {
   try {
-    const data = await gatewayFetch("/__openclaw__/memory");
-    res.json(data);
+    // Liste der Workspace-Dateien zurückgeben
+    const files = readdirSync(WORKSPACE_DIR).filter(f => f.endsWith(".md"));
+    res.json({ files });
   } catch (err) {
-    res.status(502).json({ error: "Memory konnte nicht geladen werden", detail: err.message });
+    res.status(500).json({ error: "Memory konnte nicht geladen werden", detail: err.message });
   }
 });
 
@@ -412,10 +414,16 @@ api.get("/memory/files/:filename", async (req, res) => {
     if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
-    const data = await gatewayFetch(`/__openclaw__/workspace/${filename}`);
-    res.json({ filename, content: data });
+    
+    const filePath = join(WORKSPACE_DIR, filename);
+    if (!existsSync(filePath)) {
+      return res.json({ filename, content: "" });
+    }
+    
+    const content = readFileSync(filePath, "utf-8");
+    res.json({ filename, content });
   } catch (err) {
-    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
+    res.status(500).json({ error: "Datei nicht lesbar", detail: err.message });
   }
 });
 
@@ -427,23 +435,25 @@ api.put("/memory/files/:filename", sensitiveLimiter, async (req, res) => {
     if (!ALLOWED_FILES.includes(filename)) {
       return res.status(400).json({ error: "Datei nicht erlaubt" });
     }
-    const data = await gatewayFetch(`/__openclaw__/workspace/${filename}`, {
-      method: "PUT",
-      body: JSON.stringify({ content: req.body.content }),
-    });
+    
+    const filePath = join(WORKSPACE_DIR, filename);
+    writeFileSync(filePath, req.body.content, "utf-8");
     res.json({ ok: true });
   } catch (err) {
-    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
+    res.status(500).json({ error: "Datei nicht schreibbar", detail: err.message });
   }
 });
 
 // ── Memory Folder (memory/*.md) ───────────────────────────
 api.get("/memory/folder", async (req, res) => {
   try {
-    const data = await gatewayFetch("/__openclaw__/workspace/memory");
-    res.json(data);
+    const memoryDir = join(WORKSPACE_DIR, "memory");
+    if (!existsSync(memoryDir)) {
+      return res.json({ files: [] });
+    }
+    const files = readdirSync(memoryDir).filter(f => f.endsWith(".md")).sort().reverse();
+    res.json({ files });
   } catch (err) {
-    // Fallback: leeres Array wenn Ordner nicht existiert
     res.json({ files: [] });
   }
 });
@@ -455,10 +465,16 @@ api.get("/memory/folder/:filename", async (req, res) => {
     if (!filename.endsWith(".md")) {
       return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
     }
-    const data = await gatewayFetch(`/__openclaw__/workspace/memory/${filename}`);
-    res.json({ filename, content: data });
+    
+    const filePath = join(WORKSPACE_DIR, "memory", filename);
+    if (!existsSync(filePath)) {
+      return res.json({ filename, content: "" });
+    }
+    
+    const content = readFileSync(filePath, "utf-8");
+    res.json({ filename, content });
   } catch (err) {
-    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
+    res.status(500).json({ error: "Datei nicht lesbar", detail: err.message });
   }
 });
 
@@ -468,13 +484,17 @@ api.put("/memory/folder/:filename", sensitiveLimiter, async (req, res) => {
     if (!filename.endsWith(".md")) {
       return res.status(400).json({ error: "Nur .md Dateien erlaubt" });
     }
-    const data = await gatewayFetch(`/__openclaw__/workspace/memory/${filename}`, {
-      method: "PUT",
-      body: JSON.stringify({ content: req.body.content }),
-    });
+    
+    const memoryDir = join(WORKSPACE_DIR, "memory");
+    if (!existsSync(memoryDir)) {
+      mkdirSync(memoryDir, { recursive: true });
+    }
+    
+    const filePath = join(memoryDir, filename);
+    writeFileSync(filePath, req.body.content, "utf-8");
     res.json({ ok: true });
   } catch (err) {
-    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
+    res.status(500).json({ error: "Datei nicht schreibbar", detail: err.message });
   }
 });
 
