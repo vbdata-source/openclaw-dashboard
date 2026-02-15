@@ -78,6 +78,7 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showRestartBanner, setShowRestartBanner] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   // Auth Profiles (separate from main config)
   const [authProfiles, setAuthProfiles] = useState<Record<string, AuthProfile>>({});
@@ -173,6 +174,24 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
       } catch {}
     }
   }, [config]);
+
+  // Restart handler
+  const handleRestart = useCallback(async () => {
+    if (!confirm("Gateway wirklich neustarten? Laufende Sessions werden kurz unterbrochen.")) {
+      return;
+    }
+    setRestarting(true);
+    try {
+      await api.gateway.restart("Settings changed via Dashboard");
+      setShowRestartBanner(false);
+      // Show success message
+      alert("✅ Gateway wird neugestartet...");
+    } catch (err: any) {
+      alert("❌ Restart fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
+    } finally {
+      setRestarting(false);
+    }
+  }, []);
 
   // Get field value helper
   const getValue = useCallback((path: string) => getPath(localConfig, path), [localConfig]);
@@ -684,6 +703,13 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
         <div className="oc-settings__banner oc-settings__banner--info">
           <span className="oc-settings__banner-icon">ℹ️</span>
           <span>Änderungen gespeichert. Gateway-Neustart für volle Wirkung empfohlen.</span>
+          <button
+            className="oc-settings__restart-btn"
+            onClick={handleRestart}
+            disabled={restarting}
+          >
+            {restarting ? "⏳ Neustart..." : "🔄 Jetzt neustarten"}
+          </button>
           <button
             className="oc-settings__banner-close"
             onClick={() => setShowRestartBanner(false)}

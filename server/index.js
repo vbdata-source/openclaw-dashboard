@@ -394,6 +394,23 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Gateway Control ───────────────────────────────────────
+api.post("/gateway/restart", sensitiveLimiter, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const data = await gatewayFetch("/__openclaw__/restart", {
+      method: "POST",
+      body: JSON.stringify({ 
+        reason: reason || "Dashboard restart request",
+        delayMs: 500 
+      }),
+    });
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    res.status(502).json({ error: "Gateway konnte nicht neugestartet werden", detail: err.message });
+  }
+});
+
 // ── Auth Profiles ─────────────────────────────────────────
 // Auth profiles are stored separately from main config
 // In Docker: /openclaw-agents/main/agent/auth-profiles.json

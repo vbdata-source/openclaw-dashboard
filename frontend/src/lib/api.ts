@@ -76,6 +76,11 @@ export const health = {
 // ── Gateway ───────────────────────────────────────────────
 export const gateway = {
   status: () => request("/gateway/status"),
+  restart: (reason?: string) =>
+    request<{ ok: boolean }>("/gateway/restart", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };
 
 // ── Sessions ──────────────────────────────────────────────
