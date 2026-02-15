@@ -1177,6 +1177,11 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
     // Spezialfall: agent:main:main ist die Multi-Channel Haupt-Session
     const isMainSession = key === "agent:main:main" || key.endsWith(":main:main");
     
+    // Debug: Log main session detection
+    if (i === 0) {
+      console.log("[Map] First session - key:", key, "isMain:", isMainSession, "apiChannel:", s.channel);
+    }
+    
     // Channel aus verschiedenen Quellen extrahieren (Priorität)
     let channel = isMainSession 
       ? "multi"  // Main-Session ist IMMER multi-channel
@@ -1215,7 +1220,8 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
       sender,
       agent: s.agent || s.agentId || parts[1] || "main",
       status: s.status === "active" || s.active ? "active" : s.status === "idle" ? "idle" : "completed",
-      messages: Array.isArray(s.messages) ? s.messages.length : (s.messageCount || s.turns || s.totalMessages || s.msgCount || 0),
+      // API liefert keinen Message-Count - nur wenn vorhanden anzeigen
+      messages: Array.isArray(s.messages) ? s.messages.length : (s.messageCount || s.turns || s.totalMessages || s.msgCount || -1),
       tokens: s.tokens || s.totalTokens || s.tokenCount || s.contextTokens || 0,
       startedAt: s.startedAt || s.createdAt || s.created || new Date().toISOString(),
       lastActivity: s.lastActivity || s.updatedAt || s.updated || new Date().toISOString(),

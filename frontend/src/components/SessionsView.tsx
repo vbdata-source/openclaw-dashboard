@@ -94,7 +94,7 @@ function SessionDetailPanel({ session, preview, loading, onClose }: {
       {/* Stats Bar */}
       <div className="oc-session-detail__stats">
         <div className="oc-session-detail__stat">
-          <span>💬</span> {session.messages} Messages
+          <span>💬</span> {session.messages >= 0 ? session.messages : "—"} Messages
         </div>
         <div className="oc-session-detail__stat">
           <span>🎫</span> {(session.tokens / 1000).toFixed(1)}k Tokens
@@ -156,7 +156,7 @@ export function SessionsView({
     const total = sessions.length;
     const active = sessions.filter(s => s.status === "active").length;
     const totalTokens = sessions.reduce((sum, s) => sum + s.tokens, 0);
-    const totalMessages = sessions.reduce((sum, s) => sum + s.messages, 0);
+    const totalMessages = sessions.reduce((sum, s) => sum + (s.messages >= 0 ? s.messages : 0), 0);
     const channels = new Set(sessions.map(s => s.channel)).size;
     
     return { total, active, totalTokens, totalMessages, channels };

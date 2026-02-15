@@ -159,7 +159,7 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
         {/* Stats Row */}
         <div className="oc-session-card__stats">
           <span className="oc-session-card__stat" title="Nachrichten">
-            💬 {session.messages}
+            💬 {session.messages >= 0 ? session.messages : "—"}
           </span>
           <span className="oc-session-card__stat" title="Tokens">
             🎫 {(session.tokens / 1000).toFixed(1)}k
