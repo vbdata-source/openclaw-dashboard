@@ -28,6 +28,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { SessionsView } from "./components/SessionsView";
 import { SettingsView } from "./components/settings";
+import { TemplatesView } from "./components/TemplatesView";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
@@ -2008,7 +2009,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
 }
 
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "memory" | "sessions" | "chat" | "settings" | "cron";
+type View = "kanban" | "templates" | "memory" | "sessions" | "chat" | "settings" | "cron";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -2342,6 +2343,7 @@ export default function App() {
     { key: "chat", label: "Chat", icon: "💬" },
     { key: "sessions", label: "Sessions", icon: "⚡", badge: activeSess || undefined },
     { key: "kanban", label: "Jobs", icon: "▦", badge: running || undefined },
+    { key: "templates", label: "Vorlagen", icon: "📋" },
     { key: "cron", label: "Cron", icon: "🔄" },
     { key: "memory", label: "Memory", icon: "◉" },
     { key: "settings", label: "Settings", icon: "⚙️" },
@@ -2372,6 +2374,7 @@ export default function App() {
       <main className="oc-main">
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
+        {view === "templates" && <TemplatesView onJobCreated={() => { api.jobs.list().then((res) => setJobs(res.jobs || [])); setView("kanban"); }} />}
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}

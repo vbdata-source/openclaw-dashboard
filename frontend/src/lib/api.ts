@@ -261,6 +261,64 @@ export const jobs = {
     }>("/jobs/queue/status"),
 };
 
+// ── Templates (Job Vorlagen) ──────────────────────────────
+export interface TemplateData {
+  name: string;
+  icon?: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  category?: string;
+  channel?: string;
+}
+
+export interface Template extends TemplateData {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplatesResponse {
+  templates: Template[];
+  stats: {
+    total: number;
+    categories: string[];
+  };
+}
+
+export const templates = {
+  list: (filter?: { category?: string }) => {
+    const params = new URLSearchParams();
+    if (filter?.category) params.set("category", filter.category);
+    const query = params.toString();
+    return request<TemplatesResponse>(`/templates${query ? `?${query}` : ""}`);
+  },
+  
+  get: (id: string) => request<Template>(`/templates/${id}`),
+  
+  create: (data: TemplateData) =>
+    request<Template>("/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  
+  update: (id: string, data: Partial<TemplateData>) =>
+    request<Template>(`/templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/templates/${id}`, { method: "DELETE" }),
+  
+  run: (id: string) =>
+    request<{ job: Job; template: Template }>(`/templates/${id}/run`, {
+      method: "POST",
+    }),
+  
+  categories: () =>
+    request<{ categories: string[] }>("/templates/categories"),
+};
+
 export const api = {
   auth,
   health,
@@ -274,6 +332,7 @@ export const api = {
   events,
   approvals,
   jobs,
+  templates,
 };
 
 export default api;

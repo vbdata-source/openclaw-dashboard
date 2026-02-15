@@ -20,6 +20,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 
 import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 import { jobStore, JobStatus } from "./jobStore.js";
+import { templateStore } from "./templateStore.js";
 import { createJobExecutor } from "./jobExecutor.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -956,6 +957,120 @@ api.get("/jobs/queue/status", (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "Queue-Status nicht ladbar", detail: err.message });
+  }
+});
+
+// ── Templates (Job Vorlagen) ──────────────────────────────
+// List all templates
+api.get("/templates", (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.category) filter.category = req.query.category;
+    
+    const templates = templateStore.list(filter);
+    const stats = templateStore.getStats();
+    res.json({ templates, stats });
+  } catch (err) {
+    res.status(500).json({ error: "Templates nicht ladbar", detail: err.message });
+  }
+});
+
+// Get single template
+api.get("/templates/:id", (req, res) => {
+  try {
+    const template = templateStore.get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: "Template nicht gefunden" });
+    }
+    res.json(template);
+  } catch (err) {
+    res.status(500).json({ error: "Template nicht ladbar", detail: err.message });
+  }
+});
+
+// Create template
+api.post("/templates", sensitiveLimiter, (req, res) => {
+  try {
+    const { name, icon, description, priority, category, channel } = req.body;
+    
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ error: "Name ist erforderlich" });
+    }
+    if (name.length > 100) {
+      return res.status(400).json({ error: "Name zu lang (max 100 Zeichen)" });
+    }
+    
+    const template = templateStore.create({
+      name: name.trim(),
+      icon: icon || "📋",
+      description: description?.trim() || "",
+      priority: priority || "medium",
+      category: category || "Allgemein",
+      channel: channel || null,
+    });
+    
+    res.status(201).json(template);
+  } catch (err) {
+    res.status(500).json({ error: "Template konnte nicht erstellt werden", detail: err.message });
+  }
+});
+
+// Update template
+api.put("/templates/:id", sensitiveLimiter, (req, res) => {
+  try {
+    const template = templateStore.update(req.params.id, req.body);
+    res.json(template);
+  } catch (err) {
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ error: "Template nicht gefunden" });
+    }
+    res.status(500).json({ error: "Template konnte nicht aktualisiert werden", detail: err.message });
+  }
+});
+
+// Delete template
+api.delete("/templates/:id", sensitiveLimiter, (req, res) => {
+  try {
+    templateStore.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ error: "Template nicht gefunden" });
+    }
+    res.status(500).json({ error: "Template konnte nicht gelöscht werden", detail: err.message });
+  }
+});
+
+// Get categories
+api.get("/templates/categories", (req, res) => {
+  try {
+    const categories = templateStore.getCategories();
+    res.json({ categories });
+  } catch (err) {
+    res.status(500).json({ error: "Kategorien nicht ladbar", detail: err.message });
+  }
+});
+
+// Create job from template
+api.post("/templates/:id/run", sensitiveLimiter, (req, res) => {
+  try {
+    const template = templateStore.get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: "Template nicht gefunden" });
+    }
+    
+    // Create job from template
+    const job = jobStore.create({
+      title: template.name,
+      description: template.description,
+      priority: template.priority,
+      channel: template.channel,
+      status: "queued", // Directly queue the job
+    });
+    
+    res.status(201).json({ job, template });
+  } catch (err) {
+    res.status(500).json({ error: "Job konnte nicht erstellt werden", detail: err.message });
   }
 });
 
