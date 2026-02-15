@@ -8,6 +8,13 @@ import { SettingsField } from "./SettingsField";
 import api from "../../lib/api";
 
 // ── Types ─────────────────────────────────────────────────
+interface AuthProfile {
+  type?: string;
+  mode?: string;
+  provider?: string;
+  token?: string;
+}
+
 interface SettingsViewProps {
   config: any;
   onConfigChange: (config: any) => void;
@@ -72,6 +79,29 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showRestartBanner, setShowRestartBanner] = useState(false);
 
+  // Auth Profiles (separate from main config)
+  const [authProfiles, setAuthProfiles] = useState<Record<string, AuthProfile>>({});
+  const [authProfilesDirty, setAuthProfilesDirty] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Load auth profiles on mount
+  useEffect(() => {
+    const loadAuthProfiles = async () => {
+      try {
+        setAuthLoading(true);
+        const res = await api.authProfiles.get();
+        if (res.ok && res.profiles) {
+          setAuthProfiles(res.profiles);
+        }
+      } catch (err) {
+        console.error("Failed to load auth profiles:", err);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    loadAuthProfiles();
+  }, []);
+
   // Sync with parent config
   useEffect(() => {
     if (config && !dirty) {
@@ -86,15 +116,38 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
     setSaveError(null);
   }, []);
 
+  // Auth profile change handler
+  const handleAuthChange = useCallback((profileKey: string, field: string, value: any) => {
+    setAuthProfiles((prev) => ({
+      ...prev,
+      [profileKey]: {
+        ...prev[profileKey],
+        [field]: value,
+      },
+    }));
+    setAuthProfilesDirty(true);
+    setSaveError(null);
+  }, []);
+
   // Save handler
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaveError(null);
     try {
-      await api.config.update(localConfig);
-      setDirty(false);
+      // Save main config if dirty
+      if (dirty) {
+        await api.config.update(localConfig);
+        setDirty(false);
+        onConfigChange(localConfig);
+      }
+      
+      // Save auth profiles if dirty
+      if (authProfilesDirty) {
+        await api.authProfiles.update(authProfiles);
+        setAuthProfilesDirty(false);
+      }
+      
       setShowRestartBanner(true);
-      onConfigChange(localConfig);
       // Auto-hide banner after 10s
       setTimeout(() => setShowRestartBanner(false), 10000);
     } catch (err: any) {
@@ -102,14 +155,22 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
     } finally {
       setSaving(false);
     }
-  }, [localConfig, onConfigChange]);
+  }, [localConfig, authProfiles, dirty, authProfilesDirty, onConfigChange]);
 
   // Discard changes
-  const handleDiscard = useCallback(() => {
+  const handleDiscard = useCallback(async () => {
     if (confirm("Ungespeicherte Änderungen verwerfen?")) {
       setLocalConfig(config);
       setDirty(false);
+      setAuthProfilesDirty(false);
       setSaveError(null);
+      // Reload auth profiles
+      try {
+        const res = await api.authProfiles.get();
+        if (res.ok && res.profiles) {
+          setAuthProfiles(res.profiles);
+        }
+      } catch {}
     }
   }, [config]);
 
@@ -176,7 +237,6 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
   );
 
   const renderAuthSection = () => {
-    const authProfiles = localConfig?.auth?.profiles || {};
     const profileKeys = Object.keys(authProfiles);
 
     // Provider options
@@ -218,64 +278,79 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
 
     return (
       <>
-        {profileKeys.length === 0 && (
+        {authLoading && (
+          <div className="oc-settings-empty">
+            <span className="oc-settings-empty__icon">⏳</span>
+            <p>Lade Auth-Profile...</p>
+          </div>
+        )}
+
+        {!authLoading && profileKeys.length === 0 && (
           <div className="oc-settings-empty">
             <span className="oc-settings-empty__icon">🔑</span>
             <p>Keine Auth-Profile konfiguriert</p>
           </div>
         )}
 
-        {profileKeys.map((profileKey) => {
+        {!authLoading && profileKeys.map((profileKey) => {
           const profile = authProfiles[profileKey];
           const provider = profile?.provider || "anthropic";
-          const mode = profile?.mode || "token";
+          // auth-profiles.json uses "type", openclaw.json uses "mode"
+          const mode = profile?.type || profile?.mode || "token";
           const modeOptions = MODE_OPTIONS[provider] || MODE_OPTIONS.anthropic;
           const modeInfo = modeOptions.find(m => m.value === mode);
+          const token = profile?.token || "";
+
+          // Check if it's an OAuth token (starts with sk-ant-oat)
+          const isOAuthToken = token.startsWith("sk-ant-oat");
+          const effectiveMode = isOAuthToken ? "max" : mode;
+          const effectiveModeInfo = modeOptions.find(m => m.value === effectiveMode) || modeInfo;
 
           return (
             <SettingsSection
               key={profileKey}
               title={profileKey}
               icon={getProviderIcon(provider)}
-              badge={modeInfo?.label || mode}
-              badgeColor={mode === "max" ? "#8b5cf6" : mode === "token" ? "#22c55e" : "#3b82f6"}
+              badge={effectiveModeInfo?.label || effectiveMode}
+              badgeColor={effectiveMode === "max" ? "#8b5cf6" : effectiveMode === "token" ? "#22c55e" : "#3b82f6"}
             >
               <SettingsField
                 label="Provider"
                 type="select"
                 value={provider}
-                onChange={(v) => handleChange(`auth.profiles.${profileKey}.provider`, v)}
+                onChange={(v) => handleAuthChange(profileKey, "provider", v)}
                 options={PROVIDER_OPTIONS}
               />
               <SettingsField
                 label="Modus"
                 type="select"
-                value={mode}
-                onChange={(v) => handleChange(`auth.profiles.${profileKey}.mode`, v)}
+                value={effectiveMode}
+                onChange={(v) => handleAuthChange(profileKey, "type", v)}
                 options={modeOptions.map(m => ({ value: m.value, label: m.label }))}
-                description={modeInfo?.description}
+                description={effectiveModeInfo?.description}
               />
 
               {/* Token mode: show API key field */}
-              {mode === "token" && (
+              {effectiveMode === "token" && (
                 <SettingsField
                   label="API Key"
                   type="password"
-                  value={getValue(`auth.profiles.${profileKey}.token`) || getValue(`auth.profiles.${profileKey}.apiKey`) || ""}
-                  onChange={(v) => handleChange(`auth.profiles.${profileKey}.token`, v)}
+                  value={token}
+                  onChange={(v) => handleAuthChange(profileKey, "token", v)}
                   placeholder="sk-ant-... / sk-..."
                   description="Dein API-Schlüssel vom Provider"
                 />
               )}
 
-              {/* Max/OAuth mode: show status */}
-              {(mode === "max" || mode === "oauth") && (
+              {/* Max/OAuth mode: show status and token info */}
+              {(effectiveMode === "max" || effectiveMode === "oauth") && (
                 <div className="oc-auth-oauth-info">
-                  <p>🔐 OAuth-Authentifizierung</p>
+                  <p>🔐 {effectiveMode === "max" ? "Claude Max/Pro" : "OAuth"} aktiv</p>
                   <p className="oc-auth-oauth-hint">
-                    {mode === "max" 
-                      ? "Claude Max/Pro verwendet Browser-OAuth. Konfiguration erfolgt über 'openclaw auth'."
-                      : "OAuth-Token wird automatisch verwaltet."}
+                    {token ? `Token: ${token.slice(0, 20)}...${token.slice(-8)}` : "Kein Token vorhanden"}
+                  </p>
+                  <p className="oc-auth-oauth-hint">
+                    Zum Erneuern: <code>openclaw auth add --max</code>
                   </p>
                 </div>
               )}
@@ -636,20 +711,20 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
       <div className="oc-settings__header">
         <h2 className="oc-view-title">
           ⚙️ Einstellungen
-          {loading && <span className="oc-loading-sm">⏳</span>}
+          {(loading || authLoading) && <span className="oc-loading-sm">⏳</span>}
         </h2>
         <div className="oc-settings__actions">
-          {dirty && (
+          {(dirty || authProfilesDirty) && (
             <button className="oc-btn-ghost" onClick={handleDiscard}>
               Verwerfen
             </button>
           )}
           <button
-            className={`oc-btn-primary ${dirty ? "oc-btn-primary--pulse" : ""}`}
+            className={`oc-btn-primary ${(dirty || authProfilesDirty) ? "oc-btn-primary--pulse" : ""}`}
             onClick={handleSave}
-            disabled={!dirty || saving}
+            disabled={!(dirty || authProfilesDirty) || saving}
           >
-            {saving ? "⏳ Speichern..." : dirty ? "💾 Speichern" : "✓ Gespeichert"}
+            {saving ? "⏳ Speichern..." : (dirty || authProfilesDirty) ? "💾 Speichern" : "✓ Gespeichert"}
           </button>
         </div>
       </div>
@@ -680,7 +755,7 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
       </div>
 
       {/* Unsaved Changes Warning (Dirty State Indicator) */}
-      {dirty && (
+      {(dirty || authProfilesDirty) && (
         <div className="oc-settings__dirty-indicator">
           <span className="oc-dirty-dot" />
           Ungespeicherte Änderungen

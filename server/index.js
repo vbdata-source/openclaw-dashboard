@@ -394,6 +394,59 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Auth Profiles ─────────────────────────────────────────
+// Auth profiles are stored separately from main config
+const AUTH_PROFILES_PATH = process.env.OPENCLAW_AUTH_PROFILES || 
+  join(process.env.OPENCLAW_DIR || "/home/node/.openclaw", "agents/main/agent/auth-profiles.json");
+
+api.get("/auth-profiles", async (req, res) => {
+  try {
+    if (existsSync(AUTH_PROFILES_PATH)) {
+      const content = readFileSync(AUTH_PROFILES_PATH, "utf-8");
+      const data = JSON.parse(content);
+      res.json({ ok: true, profiles: data.profiles || {}, path: AUTH_PROFILES_PATH });
+    } else {
+      res.json({ ok: true, profiles: {}, path: AUTH_PROFILES_PATH, exists: false });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Auth-Profile konnten nicht geladen werden", detail: err.message });
+  }
+});
+
+api.put("/auth-profiles", sensitiveLimiter, async (req, res) => {
+  try {
+    const { profiles } = req.body;
+    if (!profiles || typeof profiles !== "object") {
+      return res.status(400).json({ error: "profiles object required" });
+    }
+    
+    // Read existing file to preserve other fields (version, lastGood, usageStats)
+    let existing = { version: 1, profiles: {}, lastGood: {}, usageStats: {} };
+    if (existsSync(AUTH_PROFILES_PATH)) {
+      try {
+        existing = JSON.parse(readFileSync(AUTH_PROFILES_PATH, "utf-8"));
+      } catch {}
+    }
+    
+    // Merge profiles (update existing, add new)
+    const updated = {
+      ...existing,
+      profiles: { ...existing.profiles, ...profiles },
+    };
+    
+    // Ensure directory exists
+    const dir = dirname(AUTH_PROFILES_PATH);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    
+    writeFileSync(AUTH_PROFILES_PATH, JSON.stringify(updated, null, 2), "utf-8");
+    res.json({ ok: true, profiles: updated.profiles });
+  } catch (err) {
+    res.status(500).json({ error: "Auth-Profile konnten nicht gespeichert werden", detail: err.message });
+  }
+});
+
 // ── Memory / Workspace Files ──────────────────────────────
 const WORKSPACE_DIR = process.env.OPENCLAW_WORKSPACE || "/openclaw-workspace/workspace";
 const ALLOWED_FILES = ["MEMORY.md", "IDENTITY.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "AGENTS.md"];

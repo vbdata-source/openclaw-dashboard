@@ -94,6 +94,16 @@ export const config = {
     }),
 };
 
+// ── Auth Profiles ─────────────────────────────────────────
+export const authProfiles = {
+  get: () => request<{ ok: boolean; profiles: Record<string, any>; path: string }>("/auth-profiles"),
+  update: (profiles: Record<string, any>) =>
+    request("/auth-profiles", {
+      method: "PUT",
+      body: JSON.stringify({ profiles }),
+    }),
+};
+
 // ── Memory ────────────────────────────────────────────────
 export const memory = {
   list: () => request("/memory"),
@@ -252,6 +262,7 @@ export const api = {
   gateway,
   sessions,
   config,
+  authProfiles,
   memory,
   agents,
   cron,
