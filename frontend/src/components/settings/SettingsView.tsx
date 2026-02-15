@@ -122,16 +122,16 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
         <SettingsField
           label="Primary Model"
           type="select"
-          value={getValue("agents.defaults.model")}
-          onChange={(v) => handleChange("agents.defaults.model", v)}
+          value={getValue("agents.defaults.model.primary")}
+          onChange={(v) => handleChange("agents.defaults.model.primary", v)}
           options={MODEL_OPTIONS}
           description="Haupt-Modell für alle Agents"
         />
         <SettingsField
           label="Fallback Model"
           type="select"
-          value={getValue("agents.defaults.fallbackModels.0")}
-          onChange={(v) => handleChange("agents.defaults.fallbackModels", v ? [v] : [])}
+          value={getValue("agents.defaults.model.fallbacks.0")}
+          onChange={(v) => handleChange("agents.defaults.model.fallbacks", v ? [v] : [])}
           options={MODEL_OPTIONS}
           description="Wenn das primäre Modell nicht verfügbar ist"
         />
@@ -150,8 +150,8 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
         <SettingsField
           label="Subagents Max"
           type="number"
-          value={getValue("agents.defaults.subagentsMax")}
-          onChange={(v) => handleChange("agents.defaults.subagentsMax", v)}
+          value={getValue("agents.defaults.subagents.maxConcurrent")}
+          onChange={(v) => handleChange("agents.defaults.subagents.maxConcurrent", v)}
           min={1}
           max={50}
           description="Maximale Unteragenten pro Session"
@@ -248,16 +248,27 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
               onChange={(v) => handleChange("channels.msteams.appId", v)}
             />
             <SettingsField
-              label="Password"
+              label="App Password"
               type="password"
-              value={getValue("channels.msteams.password")}
-              onChange={(v) => handleChange("channels.msteams.password", v)}
+              value={getValue("channels.msteams.appPassword")}
+              onChange={(v) => handleChange("channels.msteams.appPassword", v)}
             />
             <SettingsField
               label="Tenant ID"
               type="text"
               value={getValue("channels.msteams.tenantId")}
               onChange={(v) => handleChange("channels.msteams.tenantId", v)}
+            />
+            <SettingsField
+              label="DM Policy"
+              type="select"
+              value={getValue("channels.msteams.dmPolicy")}
+              onChange={(v) => handleChange("channels.msteams.dmPolicy", v)}
+              options={[
+                { value: "open", label: "Open (Alle erlaubt)" },
+                { value: "allowlist", label: "Allowlist" },
+                { value: "closed", label: "Closed (Nur explizit)" },
+              ]}
             />
           </SettingsSection>
         )}
@@ -289,48 +300,51 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
 
   const renderGatewaySection = () => (
     <>
-      <SettingsSection title="Server Binding" icon="🔗">
+      <SettingsSection title="Server" icon="🔗">
+        <SettingsField
+          label="Mode"
+          type="select"
+          value={getValue("gateway.mode")}
+          onChange={(v) => handleChange("gateway.mode", v)}
+          options={[
+            { value: "local", label: "Local" },
+            { value: "cloud", label: "Cloud" },
+          ]}
+          description="Gateway-Betriebsmodus"
+        />
         <SettingsField
           label="Bind"
           type="select"
           value={getValue("gateway.bind")}
           onChange={(v) => handleChange("gateway.bind", v)}
           options={[
-            { value: "localhost", label: "Localhost only" },
+            { value: "loopback", label: "Loopback (127.0.0.1)" },
+            { value: "localhost", label: "Localhost" },
             { value: "lan", label: "LAN" },
             { value: "public", label: "Public (0.0.0.0)" },
           ]}
           description="Auf welchen Interfaces der Server lauscht"
         />
-        <SettingsField
-          label="Port"
-          type="number"
-          value={getValue("gateway.port")}
-          onChange={(v) => handleChange("gateway.port", v)}
-          min={1}
-          max={65535}
-          placeholder="4444"
-        />
       </SettingsSection>
 
-      <SettingsSection title="Proxy" icon="🔀">
+      <SettingsSection title="Proxy" icon="🔀" collapsible>
         <SettingsField
           label="Trusted Proxies"
           type="array"
           value={getValue("gateway.trustedProxies")}
           onChange={(v) => handleChange("gateway.trustedProxies", v)}
-          placeholder="IP-Adressen, komma-separiert"
+          placeholder="CIDR-Ranges, komma-separiert"
+          description="z.B. 10.0.0.0/8, 172.16.0.0/12"
         />
       </SettingsSection>
 
-      <SettingsSection title="Security" icon="🔐">
+      <SettingsSection title="Control UI" icon="🖥️" collapsible>
         <SettingsField
-          label="Idle Timeout (min)"
-          type="number"
-          value={getValue("gateway.idleTimeoutMin")}
-          onChange={(v) => handleChange("gateway.idleTimeoutMin", v)}
-          min={0}
-          description="Session-Timeout in Minuten (0 = nie)"
+          label="Allow Insecure Auth"
+          type="toggle"
+          value={getValue("gateway.controlUi.allowInsecureAuth")}
+          onChange={(v) => handleChange("gateway.controlUi.allowInsecureAuth", v)}
+          description="HTTP-Auth ohne HTTPS erlauben (nur für lokale Netze!)"
         />
       </SettingsSection>
     </>
@@ -362,30 +376,41 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
           description="Erlaube erhöhte Rechte für bestimmte Operationen"
         />
         <SettingsField
-          label="Allow From"
+          label="Allow From (Telegram)"
           type="array"
-          value={getValue("tools.elevated.allowFrom")}
-          onChange={(v) => handleChange("tools.elevated.allowFrom", v)}
-          placeholder="User IDs"
+          value={getValue("tools.elevated.allowFrom.telegram")}
+          onChange={(v) => handleChange("tools.elevated.allowFrom.telegram", v)}
+          placeholder="Telegram User IDs"
+          description="User IDs die elevated-Befehle ausführen dürfen"
         />
       </SettingsSection>
 
-      <SettingsSection title="Browser" icon="🌍" description="Browser-Automatisierung">
+      <SettingsSection title="Browser" icon="🌍" description="Browser-Automatisierung" collapsible defaultCollapsed>
         <SettingsField
           label="Aktiviert"
           type="toggle"
-          value={getValue("tools.browser.enabled")}
+          value={getValue("tools.browser.enabled") !== false}
           onChange={(v) => handleChange("tools.browser.enabled", v)}
         />
         <SettingsField
           label="Target"
           type="select"
-          value={getValue("tools.browser.target")}
+          value={getValue("tools.browser.target") || "sandbox"}
           onChange={(v) => handleChange("tools.browser.target", v)}
           options={[
             { value: "sandbox", label: "Sandbox" },
             { value: "host", label: "Host" },
           ]}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Approvals" icon="✅" description="Exec-Genehmigungen" collapsible defaultCollapsed>
+        <SettingsField
+          label="Exec Approvals"
+          type="toggle"
+          value={getValue("approvals.exec.enabled")}
+          onChange={(v) => handleChange("approvals.exec.enabled", v)}
+          description="Befehle müssen erst genehmigt werden"
         />
       </SettingsSection>
     </>
