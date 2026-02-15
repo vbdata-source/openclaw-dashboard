@@ -25,10 +25,15 @@ OpenClaw ist von außen nicht erreichbar — nur das Dashboard.
 4. Environment Variables setzen:
 
 ```env
+# Pflicht
 OPENCLAW_HOST=openclaw-gateway        # Container-Name deines OpenClaw
 OPENCLAW_GATEWAY_TOKEN=abc123...      # openssl rand -hex 32
 DASHBOARD_SECRET=xyz789...            # openssl rand -hex 16
 OPENCLAW_NETWORK_NAME=coolify_default # docker network ls
+
+# Optional (für Settings UI)
+OPENCLAW_DATA_PATH=/path/to/.openclaw/workspace    # Für Memory Editor
+OPENCLAW_AGENTS_PATH=/path/to/.openclaw/agents     # Für Auth Settings
 ```
 
 5. Deploy → Coolify klont, baut, startet.
@@ -74,12 +79,33 @@ cd frontend && npm install && npm run dev
 
 | Modul | Status |
 |---|---|
-| Job Board (Kanban) | ✅ 5 Lanes, Erstellen, Verschieben, Löschen |
-| Memory & Identity Editor | ✅ 4 Scopes, Inline-Edit, CRUD |
-| Session Monitor | ✅ Live-Sessions, Token-Tracking, Event Log |
-| Config Editor | ✅ Visuell + JSON, alle Sektionen |
-| Login / Auth | ✅ JWT, httpOnly Cookie, Rate Limiting |
-| WebSocket Live-Events | ✅ Auto-Reconnect, Gateway-Proxy |
+| 💬 Chat | ✅ Direct Chat mit Agent |
+| ⚡ Sessions | ✅ Live-Sessions, Token-Tracking, Event Log |
+| ▦ Job Board (Kanban) | ✅ 6 Lanes, Drag & Drop, Rückfragen |
+| 🔄 Cron Jobs | ✅ Erstellen, Bearbeiten, Delivery |
+| ◉ Memory Editor | ✅ Workspace-Dateien, memory/ Ordner |
+| ⚙️ Settings | ✅ **NEU:** Graphische Konfiguration |
+| 🔐 Login / Auth | ✅ JWT, httpOnly Cookie, Rate Limiting |
+| 📡 WebSocket | ✅ Auto-Reconnect, Gateway-Proxy |
+
+### Settings UI (Neu)
+
+Vollständige graphische Konfiguration von OpenClaw:
+
+| Section | Was konfigurierbar ist |
+|---------|----------------------|
+| 🤖 Agents | Model, Fallback, Concurrency, Compaction |
+| 🔑 Auth | Provider, Modus (API/Max/OAuth), Tokens |
+| 📱 Channels | Telegram, MS Teams, Discord |
+| 🌐 Gateway | Mode, Bind, Trusted Proxies |
+| 🔧 Tools | Exec Security, Elevated, Browser |
+| ⚙️ Advanced | Meta, Debug |
+
+**Features:**
+- Token-Maskierung mit Show/Hide Toggle
+- Automatische Erkennung von Claude Max (OAuth)
+- Dirty State mit pulsierendem Save-Button
+- Liest/schreibt echte Config-Dateien
 
 ## Sicherheit
 
@@ -100,14 +126,26 @@ cd frontend && npm install && npm run dev
 ├── .github/workflows/build.yml   # CI: Image → GHCR
 ├── server/
 │   ├── package.json
-│   └── index.js                  # Express + WS-Proxy + Auth
+│   ├── index.js                  # Express + WS-Proxy + Auth + API
+│   ├── jobStore.js               # Job-Persistenz
+│   └── jobExecutor.js            # Job-Ausführung via OpenClaw
 └── frontend/
     ├── package.json
     ├── vite.config.ts
     └── src/
         ├── main.tsx
-        ├── App.tsx               # Alle Views in einer Datei
-        ├── app.css
+        ├── App.tsx               # Hauptkomponente
+        ├── app.css               # Styles
         ├── lib/api.ts            # REST API Client
-        └── hooks/useGateway.ts   # WebSocket Hook
+        ├── hooks/useGateway.ts   # WebSocket Hook
+        ├── styles/sessions.css   # Sessions Styles
+        └── components/
+            ├── SessionsView.tsx  # Sessions Tab
+            ├── SessionCard.tsx   # Session Card
+            └── settings/         # Settings UI
+                ├── index.ts
+                ├── SettingsView.tsx
+                ├── SettingsField.tsx
+                ├── SettingsSection.tsx
+                └── SensitiveInput.tsx
 ```
