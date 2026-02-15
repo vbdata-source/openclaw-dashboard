@@ -27,6 +27,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SessionsView } from "./components/SessionsView";
+import { SettingsView } from "./components/settings";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
@@ -2007,7 +2008,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
 }
 
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "memory" | "sessions" | "chat" | "config" | "cron";
+type View = "kanban" | "memory" | "sessions" | "chat" | "settings" | "cron";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -2343,7 +2344,7 @@ export default function App() {
     { key: "kanban", label: "Jobs", icon: "▦", badge: running || undefined },
     { key: "cron", label: "Cron", icon: "🔄" },
     { key: "memory", label: "Memory", icon: "◉" },
-    { key: "config", label: "Config", icon: "⚙" },
+    { key: "settings", label: "Settings", icon: "⚙️" },
   ];
 
   return (
@@ -2374,7 +2375,7 @@ export default function App() {
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
-        {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
+        {view === "settings" && <SettingsView config={cfg} onConfigChange={(c) => { setCfg(c); }} loading={dataLoading} />}
       </main>
     </div>
   );
