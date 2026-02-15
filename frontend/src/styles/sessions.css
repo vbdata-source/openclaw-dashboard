@@ -1,0 +1,561 @@
+/* ============================================================
+   Sessions View — WOW Styles
+   ============================================================ */
+
+/* Layout */
+.oc-sessions-layout {
+  display: flex;
+  gap: 20px;
+  height: 100%;
+}
+
+.oc-sessions-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.oc-sessions-main--narrow {
+  max-width: calc(100% - 420px);
+}
+
+/* Header */
+.oc-sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.oc-sessions-header__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.oc-sessions-header__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.oc-sessions-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--tx);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.oc-sessions-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #22c55e;
+}
+
+.oc-pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+}
+
+.oc-sessions-sort {
+  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 8px;
+  color: var(--tx);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* Stats Row */
+.oc-sessions-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.oc-sessions-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.oc-sessions-stat:hover {
+  background: var(--bg3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.oc-sessions-stat__icon {
+  font-size: 1.5rem;
+}
+
+.oc-sessions-stat__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.oc-sessions-stat__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--tx);
+}
+
+.oc-sessions-stat__label {
+  font-size: 0.75rem;
+  color: var(--txd);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Filters */
+.oc-sessions-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oc-sessions-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: var(--txd);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oc-sessions-filter:hover {
+  background: var(--bg3);
+  border-color: var(--acc);
+}
+
+.oc-sessions-filter--active {
+  background: linear-gradient(135deg, var(--acc), color-mix(in srgb, var(--acc) 80%, black));
+  border-color: var(--acc);
+  color: white;
+}
+
+.oc-sessions-filter__count {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.oc-sessions-filter--active .oc-sessions-filter__count {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Session Cards Grid */
+.oc-sessions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.oc-sessions-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px;
+  color: var(--txd);
+}
+
+.oc-sessions-empty__icon {
+  font-size: 3rem;
+}
+
+/* Session Card */
+.oc-session-card {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oc-session-card:hover {
+  background: var(--bg3);
+  border-color: var(--acc);
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.oc-session-card--active {
+  border-left: 3px solid #22c55e;
+}
+
+.oc-session-card--selected {
+  background: var(--bg3);
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Channel Badge */
+.oc-session-card__channel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.oc-session-card__channel-icon {
+  font-size: 1.5rem;
+}
+
+/* Card Content */
+.oc-session-card__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oc-session-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oc-session-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oc-session-card__name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--tx);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-session-card__channel-label {
+  font-size: 0.75rem;
+  color: var(--txd);
+}
+
+.oc-session-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.oc-session-card__pulse {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Message Preview */
+.oc-session-card__preview {
+  font-size: 0.875rem;
+  color: var(--txd);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Stats Row */
+.oc-session-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--txd);
+}
+
+.oc-session-card__stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.oc-session-card__time {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--txd);
+}
+
+/* Token Bar */
+.oc-session-card__bar {
+  height: 3px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.oc-session-card__bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Detail Panel */
+.oc-session-detail {
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.oc-session-detail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--br);
+  background: var(--bg3);
+}
+
+.oc-session-detail__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.oc-session-detail__icon {
+  font-size: 1.5rem;
+}
+
+.oc-session-detail__title h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--tx);
+}
+
+.oc-session-detail__sub {
+  font-size: 0.75rem;
+  color: var(--txd);
+}
+
+.oc-session-detail__close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border: 1px solid var(--br);
+  border-radius: 8px;
+  color: var(--txd);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oc-session-detail__close:hover {
+  background: var(--err);
+  border-color: var(--err);
+  color: white;
+}
+
+/* Detail Stats */
+.oc-session-detail__stats {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px;
+  border-bottom: 1px solid var(--br);
+}
+
+.oc-session-detail__stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--txd);
+}
+
+/* Chat Messages */
+.oc-session-detail__chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oc-session-detail__loading,
+.oc-session-detail__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  color: var(--txd);
+}
+
+.oc-loading-spinner {
+  font-size: 1.5rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Message Bubbles */
+.oc-session-detail__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 90%;
+}
+
+.oc-session-detail__msg--user {
+  align-self: flex-start;
+}
+
+.oc-session-detail__msg--assistant {
+  align-self: flex-end;
+}
+
+.oc-session-detail__msg--system {
+  align-self: center;
+  text-align: center;
+}
+
+.oc-session-detail__msg-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.oc-session-detail__msg-role {
+  color: var(--txd);
+}
+
+.oc-session-detail__msg-time {
+  color: var(--txd);
+  opacity: 0.7;
+}
+
+.oc-session-detail__msg-text {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.oc-session-detail__msg--user .oc-session-detail__msg-text {
+  background: var(--bg3);
+  color: var(--tx);
+  border-bottom-left-radius: 4px;
+}
+
+.oc-session-detail__msg--assistant .oc-session-detail__msg-text {
+  background: linear-gradient(135deg, var(--acc), color-mix(in srgb, var(--acc) 80%, black));
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.oc-session-detail__msg--system .oc-session-detail__msg-text {
+  background: var(--bg);
+  color: var(--txd);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+/* Loading indicator */
+.oc-loading-sm {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .oc-sessions-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .oc-sessions-main--narrow {
+    max-width: 100%;
+  }
+  
+  .oc-session-detail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 400px;
+    z-index: 100;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.2);
+  }
+}
+
+@media (max-width: 640px) {
+  .oc-sessions-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .oc-session-card {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .oc-session-card__channel {
+    width: 40px;
+    height: 40px;
+  }
+}

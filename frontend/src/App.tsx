@@ -26,6 +26,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { SessionsView } from "./components/SessionsView";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
@@ -81,6 +82,9 @@ export interface SessionEntry {
   tokens: number;
   startedAt: string;
   lastActivity: string;
+  lastMessage?: string;
+  model?: string;
+  cost?: number;
 }
 
 // ── Login Screen ──────────────────────────────────────────
@@ -1174,16 +1178,31 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
     const channel = s.channel || parts[2] || "unknown";
     const sender = s.sender || s.peer || s.from || parts.slice(3).join(":") || key;
 
+    // Extract last message text if available
+    let lastMessageText: string | undefined;
+    if (Array.isArray(s.messages) && s.messages.length > 0) {
+      const lastMsg = s.messages[s.messages.length - 1];
+      const content = lastMsg?.content;
+      if (Array.isArray(content)) {
+        lastMessageText = content.find((c: any) => c.type === "text")?.text?.slice(0, 100);
+      } else if (typeof content === "string") {
+        lastMessageText = content.slice(0, 100);
+      }
+    }
+
     return {
       id: key,
       channel,
       sender,
       agent: s.agent || s.agentId || parts[1] || "main",
       status: s.status === "active" || s.active ? "active" : s.status === "idle" ? "idle" : "completed",
-      messages: s.messages || s.messageCount || s.turns || 0,
+      messages: Array.isArray(s.messages) ? s.messages.length : (s.messageCount || s.turns || 0),
       tokens: s.tokens || s.totalTokens || s.tokenCount || 0,
       startedAt: s.startedAt || s.createdAt || s.created || new Date().toISOString(),
-      lastActivity: s.lastActivity || s.updatedAt || s.lastMessage || s.updated || new Date().toISOString(),
+      lastActivity: s.lastActivity || s.updatedAt || s.updated || new Date().toISOString(),
+      lastMessage: lastMessageText,
+      model: s.model,
+      cost: s.cost,
     } as SessionEntry;
   });
 }
@@ -2271,7 +2290,7 @@ export default function App() {
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
-        {view === "sessions" && <SessionMonitor sessions={sessions} events={wsEvents} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
+        {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "config" && <ConfigEditor config={cfg} onSave={(c) => { setCfg(c); gwRequest("config.patch", { patch: c }).catch(() => {}); }} loading={dataLoading} />}
       </main>
     </div>
