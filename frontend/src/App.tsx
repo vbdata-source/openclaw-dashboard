@@ -1174,11 +1174,16 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
     const key = s.key || s.id || s.sessionKey || `s${i}`;
     const parts = key.split(":");
 
+    // Spezialfall: agent:main:main ist die Multi-Channel Haupt-Session
+    const isMainSession = key === "agent:main:main" || key.endsWith(":main:main");
+    
     // Channel aus verschiedenen Quellen extrahieren (Priorität)
-    let channel = s.channel 
-      || s.deliveryContext?.channel 
-      || (parts.length > 3 ? parts[2] : null)  // Nur wenn mehr als 3 Teile
-      || "main";
+    let channel = isMainSession 
+      ? "multi"  // Main-Session ist IMMER multi-channel
+      : (s.channel 
+          || s.deliveryContext?.channel 
+          || (parts.length > 3 ? parts[2] : null)
+          || "main");
     
     // "main" als Channel-Name -> "multi" (bedient mehrere Kanäle)
     if (channel === "main") channel = "multi";
