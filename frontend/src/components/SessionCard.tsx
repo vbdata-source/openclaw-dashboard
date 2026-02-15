@@ -33,6 +33,8 @@ const CHANNEL_CONFIG: Record<string, { icon: string; color: string; label: strin
   subagent: { icon: "🤖", color: "#8b5cf6", label: "Subagent" },
   imessage: { icon: "🍎", color: "#34C759", label: "iMessage" },
   googlechat: { icon: "💬", color: "#00AC47", label: "Google Chat" },
+  multi: { icon: "🔀", color: "#6366f1", label: "Multi-Channel" },
+  main: { icon: "🦞", color: "#ef4444", label: "Main Session" },
 };
 
 // Status Config

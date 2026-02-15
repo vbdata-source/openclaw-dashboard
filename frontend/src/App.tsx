@@ -1174,9 +1174,23 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
     const key = s.key || s.id || s.sessionKey || `s${i}`;
     const parts = key.split(":");
 
-    // Channel und Sender aus Session-Key extrahieren
-    const channel = s.channel || parts[2] || "unknown";
-    const sender = s.sender || s.peer || s.from || parts.slice(3).join(":") || key;
+    // Channel aus verschiedenen Quellen extrahieren (Priorität)
+    let channel = s.channel 
+      || s.deliveryContext?.channel 
+      || (parts.length > 3 ? parts[2] : null)  // Nur wenn mehr als 3 Teile
+      || "main";
+    
+    // "main" als Channel-Name -> "multi" (bedient mehrere Kanäle)
+    if (channel === "main") channel = "multi";
+    
+    // Sender aus verschiedenen Quellen
+    const sender = s.sender 
+      || s.peer 
+      || s.from 
+      || s.deliveryContext?.to 
+      || (parts.length > 3 ? parts.slice(3).join(":") : null)
+      || s.displayName
+      || key;
 
     // Extract last message text if available
     let lastMessageText: string | undefined;

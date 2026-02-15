@@ -74,6 +74,7 @@ function SessionDetailPanel({ session, preview, loading, onClose }: {
     telegram: "✈️", whatsapp: "📱", discord: "🎮", slack: "💼",
     msteams: "🏢", signal: "🔒", webchat: "🌐", cron: "⏰",
     subagent: "🤖", imessage: "🍎", googlechat: "💬",
+    multi: "🔀", main: "🦞",
   };
   
   return (
