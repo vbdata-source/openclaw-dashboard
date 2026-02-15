@@ -16,7 +16,7 @@ RUN npm run build
 # ── Stage 2: Production Server ─────────────────────────────
 FROM node:20-alpine
 
-RUN apk add --no-cache tini wget
+RUN apk add --no-cache tini wget su-exec
 
 WORKDIR /app
 
@@ -30,11 +30,13 @@ COPY server/ ./
 # Frontend-Build aus Stage 1 reinkopieren
 COPY --from=frontend /build/dist ./public
 
-# Non-root User + Data-Verzeichnis mit korrekten Permissions
-# uid=1000 für Kompatibilität mit OpenClaw workspace (node:node)
+# Data-Verzeichnis vorbereiten
 RUN mkdir -p /app/data/results && \
     chown -R node:node /app
-USER node
+
+# Entrypoint-Script (fixt Permissions beim Start, dann switch zu node)
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 EXPOSE 3200
@@ -42,5 +44,4 @@ EXPOSE 3200
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -q --spider http://localhost:3200/api/health || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "index.js"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
