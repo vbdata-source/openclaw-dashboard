@@ -41,16 +41,59 @@ const NAV_ITEMS: NavItem[] = [
   { key: "advanced", label: "Erweitert", icon: "⚙️", description: "Meta, Debug" },
 ];
 
-// Model options
-const MODEL_OPTIONS = [
-  { value: "anthropic/claude-opus-4-5", label: "Claude Opus 4.5 (Best)" },
-  { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-  { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-  { value: "openai/gpt-4o", label: "GPT-4o" },
-  { value: "openai/gpt-4-turbo", label: "GPT-4 Turbo" },
-  { value: "google/gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-  { value: "google/gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-];
+// Provider prefixes we care about
+const RELEVANT_PROVIDERS = ["anthropic", "openai", "google"];
+
+// Hook: Load models from OpenRouter API
+function useOpenRouterModels() {
+  const [models, setModels] = useState<{ value: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check cache first (valid for 1 hour)
+    const cached = localStorage.getItem("openrouter-models");
+    const cacheTime = localStorage.getItem("openrouter-models-time");
+    if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 3600000) {
+      setModels(JSON.parse(cached));
+      setLoading(false);
+      return;
+    }
+
+    fetch("https://openrouter.ai/api/v1/models")
+      .then((res) => res.json())
+      .then((data) => {
+        const filtered = (data.data || [])
+          .filter((m: any) => RELEVANT_PROVIDERS.some((p) => m.id.startsWith(p + "/")))
+          .sort((a: any, b: any) => {
+            // Sort by provider, then by name
+            const provA = a.id.split("/")[0];
+            const provB = b.id.split("/")[0];
+            if (provA !== provB) return provA.localeCompare(provB);
+            return a.name.localeCompare(b.name);
+          })
+          .map((m: any) => ({
+            value: m.id,
+            label: m.name.replace(/^[^:]+:\s*/, ""), // Remove "Provider: " prefix
+          }));
+        setModels(filtered);
+        // Cache it
+        localStorage.setItem("openrouter-models", JSON.stringify(filtered));
+        localStorage.setItem("openrouter-models-time", Date.now().toString());
+      })
+      .catch((err) => {
+        console.error("Failed to load models:", err);
+        // Fallback to some defaults
+        setModels([
+          { value: "anthropic/claude-opus-4-5", label: "Claude Opus 4.5" },
+          { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+          { value: "openai/gpt-4o", label: "GPT-4o" },
+        ]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { models, loading };
+}
 
 // ── Helper: Deep get/set ──────────────────────────────────
 function getPath(obj: any, path: string): any {
@@ -80,6 +123,9 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showRestartBanner, setShowRestartBanner] = useState(false);
   const [restarting, setRestarting] = useState(false);
+
+  // Dynamic model list from OpenRouter
+  const { models: MODEL_OPTIONS, loading: modelsLoading } = useOpenRouterModels();
 
   // Auth Profiles (separate from main config)
   const [authProfiles, setAuthProfiles] = useState<Record<string, AuthProfile>>({});
