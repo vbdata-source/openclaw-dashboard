@@ -396,8 +396,14 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 
 // ── Auth Profiles ─────────────────────────────────────────
 // Auth profiles are stored separately from main config
+// In Docker: /openclaw-agents/main/agent/auth-profiles.json
+// Locally: /home/node/.openclaw/agents/main/agent/auth-profiles.json
 const AUTH_PROFILES_PATH = process.env.OPENCLAW_AUTH_PROFILES || 
-  join(process.env.OPENCLAW_DIR || "/home/node/.openclaw", "agents/main/agent/auth-profiles.json");
+  (existsSync("/openclaw-agents/main/agent/auth-profiles.json") 
+    ? "/openclaw-agents/main/agent/auth-profiles.json"
+    : join(process.env.OPENCLAW_DIR || "/home/node/.openclaw", "agents/main/agent/auth-profiles.json"));
+
+console.log(`[Auth] Profiles path: ${AUTH_PROFILES_PATH} (exists: ${existsSync(AUTH_PROFILES_PATH)})`);
 
 api.get("/auth-profiles", async (req, res) => {
   try {

@@ -39,6 +39,8 @@ services:
       - dashboard-data:/app/data
       # Bind-mount zum OpenClaw Workspace (direkt workspace/, weil .openclaw 700 permissions hat)
       - ${OPENCLAW_DATA_PATH:-/var/lib/docker/volumes/d48ookcc80wg8ss48kwsckws_moltbot-data/_data/workspace}:/openclaw-workspace/workspace
+      # Auth-Profiles (agents/main/agent/)
+      - ${OPENCLAW_AGENTS_PATH:-/var/lib/docker/volumes/d48ookcc80wg8ss48kwsckws_moltbot-data/_data/agents}:/openclaw-agents
     networks:
       - openclaw-net
     healthcheck:
