@@ -14,7 +14,7 @@ interface SettingsViewProps {
   loading?: boolean;
 }
 
-type SectionKey = "agents" | "channels" | "gateway" | "tools" | "plugins" | "advanced";
+type SectionKey = "agents" | "auth" | "channels" | "gateway" | "tools" | "plugins" | "advanced";
 
 interface NavItem {
   key: SectionKey;
@@ -25,11 +25,12 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: "agents", label: "Agents", icon: "🤖", description: "Model, Concurrency, Compaction" },
+  { key: "auth", label: "Auth", icon: "🔑", description: "API Keys, Claude Max, OAuth" },
   { key: "channels", label: "Channels", icon: "📱", description: "Telegram, Teams, etc." },
   { key: "gateway", label: "Gateway", icon: "🌐", description: "Server, Binding, Proxy" },
   { key: "tools", label: "Tools", icon: "🔧", description: "Exec, Elevated, Browser" },
   { key: "plugins", label: "Plugins", icon: "🔌", description: "Erweiterungen" },
-  { key: "advanced", label: "Erweitert", icon: "⚙️", description: "Meta, Compaction" },
+  { key: "advanced", label: "Erweitert", icon: "⚙️", description: "Meta, Debug" },
 ];
 
 // Model options
@@ -173,6 +174,125 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
       </SettingsSection>
     </>
   );
+
+  const renderAuthSection = () => {
+    const authProfiles = localConfig?.auth?.profiles || {};
+    const profileKeys = Object.keys(authProfiles);
+
+    // Provider options
+    const PROVIDER_OPTIONS = [
+      { value: "anthropic", label: "Anthropic (Claude)" },
+      { value: "openai", label: "OpenAI (GPT)" },
+      { value: "google", label: "Google (Gemini)" },
+      { value: "openrouter", label: "OpenRouter" },
+    ];
+
+    // Mode options per provider
+    const MODE_OPTIONS: Record<string, { value: string; label: string; description: string }[]> = {
+      anthropic: [
+        { value: "token", label: "API Token", description: "Anthropic API Key" },
+        { value: "max", label: "Claude Max", description: "Claude Pro/Max Subscription (OAuth)" },
+        { value: "oauth", label: "OAuth", description: "OAuth Flow" },
+      ],
+      openai: [
+        { value: "token", label: "API Token", description: "OpenAI API Key" },
+      ],
+      google: [
+        { value: "token", label: "API Token", description: "Google AI API Key" },
+        { value: "oauth", label: "OAuth", description: "Google OAuth" },
+      ],
+      openrouter: [
+        { value: "token", label: "API Token", description: "OpenRouter API Key" },
+      ],
+    };
+
+    const getProviderIcon = (provider: string) => {
+      switch (provider) {
+        case "anthropic": return "🅰️";
+        case "openai": return "🤖";
+        case "google": return "🔷";
+        case "openrouter": return "🔀";
+        default: return "🔑";
+      }
+    };
+
+    return (
+      <>
+        {profileKeys.length === 0 && (
+          <div className="oc-settings-empty">
+            <span className="oc-settings-empty__icon">🔑</span>
+            <p>Keine Auth-Profile konfiguriert</p>
+          </div>
+        )}
+
+        {profileKeys.map((profileKey) => {
+          const profile = authProfiles[profileKey];
+          const provider = profile?.provider || "anthropic";
+          const mode = profile?.mode || "token";
+          const modeOptions = MODE_OPTIONS[provider] || MODE_OPTIONS.anthropic;
+          const modeInfo = modeOptions.find(m => m.value === mode);
+
+          return (
+            <SettingsSection
+              key={profileKey}
+              title={profileKey}
+              icon={getProviderIcon(provider)}
+              badge={modeInfo?.label || mode}
+              badgeColor={mode === "max" ? "#8b5cf6" : mode === "token" ? "#22c55e" : "#3b82f6"}
+            >
+              <SettingsField
+                label="Provider"
+                type="select"
+                value={provider}
+                onChange={(v) => handleChange(`auth.profiles.${profileKey}.provider`, v)}
+                options={PROVIDER_OPTIONS}
+              />
+              <SettingsField
+                label="Modus"
+                type="select"
+                value={mode}
+                onChange={(v) => handleChange(`auth.profiles.${profileKey}.mode`, v)}
+                options={modeOptions.map(m => ({ value: m.value, label: m.label }))}
+                description={modeInfo?.description}
+              />
+
+              {/* Token mode: show API key field */}
+              {mode === "token" && (
+                <SettingsField
+                  label="API Key"
+                  type="password"
+                  value={getValue(`auth.profiles.${profileKey}.token`) || getValue(`auth.profiles.${profileKey}.apiKey`) || ""}
+                  onChange={(v) => handleChange(`auth.profiles.${profileKey}.token`, v)}
+                  placeholder="sk-ant-... / sk-..."
+                  description="Dein API-Schlüssel vom Provider"
+                />
+              )}
+
+              {/* Max/OAuth mode: show status */}
+              {(mode === "max" || mode === "oauth") && (
+                <div className="oc-auth-oauth-info">
+                  <p>🔐 OAuth-Authentifizierung</p>
+                  <p className="oc-auth-oauth-hint">
+                    {mode === "max" 
+                      ? "Claude Max/Pro verwendet Browser-OAuth. Konfiguration erfolgt über 'openclaw auth'."
+                      : "OAuth-Token wird automatisch verwaltet."}
+                  </p>
+                </div>
+              )}
+            </SettingsSection>
+          );
+        })}
+
+        <SettingsSection title="Neues Profil hinzufügen" icon="➕" collapsible defaultCollapsed>
+          <p className="oc-settings-hint">
+            Neue Auth-Profile können über die CLI hinzugefügt werden:<br/>
+            <code>openclaw auth add anthropic</code><br/>
+            <code>openclaw auth add --max</code> (für Claude Pro/Max)
+          </p>
+        </SettingsSection>
+      </>
+    );
+  };
 
   const renderChannelsSection = () => {
     const channels = localConfig?.channels || {};
@@ -472,6 +592,7 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
   const renderSection = () => {
     switch (activeSection) {
       case "agents": return renderAgentsSection();
+      case "auth": return renderAuthSection();
       case "channels": return renderChannelsSection();
       case "gateway": return renderGatewaySection();
       case "tools": return renderToolsSection();
