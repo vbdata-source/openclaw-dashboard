@@ -37,7 +37,11 @@ async function request<T = any>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(body.error || res.statusText, res.status);
+    // Include detail if available (e.g., from gateway proxy errors)
+    const message = body.detail 
+      ? `${body.error}: ${body.detail}`
+      : (body.error || res.statusText);
+    throw new ApiError(message, res.status);
   }
 
   const contentType = res.headers.get("content-type") || "";
