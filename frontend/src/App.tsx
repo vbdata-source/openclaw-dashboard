@@ -1215,8 +1215,8 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
       sender,
       agent: s.agent || s.agentId || parts[1] || "main",
       status: s.status === "active" || s.active ? "active" : s.status === "idle" ? "idle" : "completed",
-      messages: Array.isArray(s.messages) ? s.messages.length : (s.messageCount || s.turns || 0),
-      tokens: s.tokens || s.totalTokens || s.tokenCount || 0,
+      messages: Array.isArray(s.messages) ? s.messages.length : (s.messageCount || s.turns || s.totalMessages || s.msgCount || 0),
+      tokens: s.tokens || s.totalTokens || s.tokenCount || s.contextTokens || 0,
       startedAt: s.startedAt || s.createdAt || s.created || new Date().toISOString(),
       lastActivity: s.lastActivity || s.updatedAt || s.updated || new Date().toISOString(),
       lastMessage: lastMessageText,
@@ -2032,21 +2032,53 @@ export default function App() {
     
     setPreviewLoading(true);
     try {
-      const res = await gwRequest("sessions.preview", { 
-        keys: [session.id], 
-        limit: 50,
-        maxChars: 500 
-      });
-      const preview = res?.previews?.[0];
-      if (preview?.items) {
-        setSessionPreview(preview.items.map((item: any) => ({
-          role: item.role || "user",
-          text: item.text || item.content || "",
-          ts: item.ts || item.timestamp,
-        })));
+      // Versuche sessions.history (korrekte API) mit Fallback zu sessions.preview
+      let messages: any[] = [];
+      
+      try {
+        const historyRes = await gwRequest("sessions.history", { 
+          sessionKey: session.id,
+          limit: 50
+        });
+        messages = historyRes?.messages || historyRes?.items || [];
+        console.log("[App] sessions.history Response:", historyRes);
+      } catch (histErr) {
+        console.log("[App] sessions.history failed, trying preview:", histErr);
+        // Fallback zu sessions.preview
+        const previewRes = await gwRequest("sessions.preview", { 
+          keys: [session.id], 
+          limit: 50,
+          maxChars: 500 
+        });
+        const preview = previewRes?.previews?.[0];
+        messages = preview?.items || [];
+      }
+      
+      if (messages.length > 0) {
+        setSessionPreview(messages.map((item: any) => {
+          // Handle verschiedene Content-Formate
+          let text = "";
+          const content = item.content;
+          if (Array.isArray(content)) {
+            text = content.map((c: any) => c.text || "").join("");
+          } else if (typeof content === "string") {
+            text = content;
+          } else {
+            text = item.text || "";
+          }
+          
+          return {
+            role: item.role || "user",
+            text: text.slice(0, 500),
+            ts: item.ts || item.timestamp,
+          };
+        }));
+      } else {
+        setSessionPreview([]);
       }
     } catch (err) {
       console.error("[App] Session preview error:", err);
+      setSessionPreview([]);
     } finally {
       setPreviewLoading(false);
     }
@@ -2105,10 +2137,11 @@ export default function App() {
 
       // 3. Sessions laden
       try {
-        const res = await gwRequest("sessions.list");
+        const res = await gwRequest("sessions.list", { messageLimit: 5 });
+        console.log("[App] sessions.list RAW Response:", JSON.stringify(res).slice(0, 1000));
         const mapped = mapSessionsResponse(res);
         setSessions(mapped);
-        console.log("[App] Sessions geladen:", mapped.length);
+        console.log("[App] Sessions geladen:", mapped.length, "Erste Session:", mapped[0]);
       } catch (err: any) {
         console.warn("[App] Sessions laden fehlgeschlagen:", err.message);
       }
