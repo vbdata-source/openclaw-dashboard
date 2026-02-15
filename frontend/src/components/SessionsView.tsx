@@ -156,7 +156,10 @@ export function SessionsView({
     const total = sessions.length;
     const active = sessions.filter(s => s.status === "active").length;
     const totalTokens = sessions.reduce((sum, s) => sum + s.tokens, 0);
-    const totalMessages = sessions.reduce((sum, s) => sum + (s.messages >= 0 ? s.messages : 0), 0);
+    const knownMessages = sessions.filter(s => s.messages >= 0);
+    const totalMessages = knownMessages.length > 0 
+      ? knownMessages.reduce((sum, s) => sum + s.messages, 0)
+      : -1;  // -1 = "unbekannt"
     const channels = new Set(sessions.map(s => s.channel)).size;
     
     return { total, active, totalTokens, totalMessages, channels };
@@ -237,7 +240,7 @@ export function SessionsView({
         {/* Stats Row */}
         <div className="oc-sessions-stats">
           <StatCard icon="🤖" value={stats.total} label="Sessions" />
-          <StatCard icon="💬" value={stats.totalMessages} label="Messages" />
+          <StatCard icon="💬" value={stats.totalMessages >= 0 ? stats.totalMessages : "—"} label="Messages" />
           <StatCard icon="🎫" value={`${(stats.totalTokens / 1000).toFixed(1)}k`} label="Tokens" />
           <StatCard icon="📡" value={stats.channels} label="Kanäle" />
         </div>
