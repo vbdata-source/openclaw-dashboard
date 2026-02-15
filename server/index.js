@@ -395,54 +395,22 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Gateway Control ───────────────────────────────────────
-// Restart uses WebSocket RPC instead of HTTP
+// Restart not directly available from Dashboard container
+// Returns instructions for manual restart
 api.post("/gateway/restart", sensitiveLimiter, async (req, res) => {
-  try {
-    const { reason } = req.body || {};
-    // Use WebSocket to send restart command
-    const wsUrl = config.gatewayWs;
-    
-    // Create a temporary WebSocket connection for the restart command
-    const ws = new WebSocket(wsUrl);
-    
-    const timeout = setTimeout(() => {
-      ws.close();
-      res.status(504).json({ error: "Gateway restart timeout" });
-    }, 10000);
-    
-    ws.on("open", () => {
-      // Send restart request via WebSocket RPC
-      const requestId = `restart-${Date.now()}`;
-      ws.send(JSON.stringify({
-        type: "request",
-        id: requestId,
-        method: "gateway.restart",
-        params: {
-          reason: reason || "Dashboard restart request",
-          delayMs: 500
-        }
-      }));
-    });
-    
-    ws.on("message", (data) => {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === "response" || msg.type === "result" || msg.ok !== undefined) {
-          clearTimeout(timeout);
-          ws.close();
-          res.json({ ok: true, ...msg });
-        }
-      } catch {}
-    });
-    
-    ws.on("error", (err) => {
-      clearTimeout(timeout);
-      res.status(502).json({ error: "Gateway WebSocket Fehler", detail: err.message });
-    });
-    
-  } catch (err) {
-    res.status(502).json({ error: "Gateway konnte nicht neugestartet werden", detail: err.message });
-  }
+  // Dashboard can't directly restart Gateway (different container/process)
+  // Return helpful instructions instead
+  res.status(501).json({ 
+    ok: false,
+    error: "Direkter Restart nicht möglich",
+    message: "Das Dashboard kann den Gateway nicht direkt neustarten (separater Container).",
+    instructions: [
+      "Option 1: In Coolify → OpenClaw Service → Restart",
+      "Option 2: SSH zum Server → docker restart <openclaw-container>",
+      "Option 3: openclaw gateway restart (auf dem Host)"
+    ],
+    hint: "Config-Änderungen werden beim nächsten Gateway-Start übernommen."
+  });
 });
 
 // ── Auth Profiles ─────────────────────────────────────────

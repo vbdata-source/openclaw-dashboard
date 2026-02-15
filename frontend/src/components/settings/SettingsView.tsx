@@ -182,12 +182,43 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
     }
     setRestarting(true);
     try {
-      await api.gateway.restart("Settings changed via Dashboard");
-      setShowRestartBanner(false);
-      // Show success message
-      alert("✅ Gateway wird neugestartet...");
+      const res = await api.gateway.restart("Settings changed via Dashboard");
+      if (res.ok) {
+        setShowRestartBanner(false);
+        alert("✅ Gateway wird neugestartet...");
+      } else {
+        // Show instructions modal
+        alert(
+          "ℹ️ Gateway-Restart\n\n" +
+          "Das Dashboard kann den Gateway nicht direkt neustarten.\n\n" +
+          "Optionen:\n" +
+          "• Coolify → OpenClaw Service → Restart\n" +
+          "• SSH: docker restart <container>\n" +
+          "• CLI: openclaw gateway restart\n\n" +
+          "Config-Änderungen werden beim nächsten Start übernommen."
+        );
+      }
     } catch (err: any) {
-      alert("❌ Restart fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
+      // Parse error response for instructions
+      const errorData = err.instructions ? err : null;
+      if (errorData?.instructions) {
+        alert(
+          "ℹ️ Gateway-Restart\n\n" +
+          (errorData.message || "Direkter Restart nicht möglich.") + "\n\n" +
+          "Optionen:\n" +
+          errorData.instructions.map((i: string) => "• " + i).join("\n") + "\n\n" +
+          (errorData.hint || "")
+        );
+      } else {
+        alert(
+          "ℹ️ Gateway-Restart\n\n" +
+          "Direkter Restart nicht möglich (separater Container).\n\n" +
+          "Optionen:\n" +
+          "• Coolify → OpenClaw Service → Restart\n" +
+          "• SSH: docker restart <container>\n" +
+          "• CLI: openclaw gateway restart"
+        );
+      }
     } finally {
       setRestarting(false);
     }
