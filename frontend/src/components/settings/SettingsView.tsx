@@ -52,8 +52,8 @@ function useOpenRouterModels() {
 
   useEffect(() => {
     // Check cache first (valid for 1 hour)
-    const cached = localStorage.getItem("openrouter-models");
-    const cacheTime = localStorage.getItem("openrouter-models-time");
+    const cached = localStorage.getItem("openrouter-models-v2");
+    const cacheTime = localStorage.getItem("openrouter-models-v2-time");
     if (cached && cacheTime && Date.now() - parseInt(cacheTime) < 3600000) {
       setModels(JSON.parse(cached));
       setLoading(false);
@@ -78,8 +78,8 @@ function useOpenRouterModels() {
           }));
         setModels(filtered);
         // Cache it
-        localStorage.setItem("openrouter-models", JSON.stringify(filtered));
-        localStorage.setItem("openrouter-models-time", Date.now().toString());
+        localStorage.setItem("openrouter-models-v2", JSON.stringify(filtered));
+        localStorage.setItem("openrouter-models-v2-time", Date.now().toString());
       })
       .catch((err) => {
         console.error("Failed to load models:", err);
