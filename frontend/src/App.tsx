@@ -2137,13 +2137,13 @@ export default function App() {
 
       // 3. Sessions laden
       try {
-        const res = await gwRequest("sessions.list", { messageLimit: 5 });
-        console.log("[App] sessions.list RAW Response:", JSON.stringify(res).slice(0, 1000));
+        const res = await gwRequest("sessions.list");
+        console.log("[App] sessions.list RAW:", res);
         const mapped = mapSessionsResponse(res);
         setSessions(mapped);
-        console.log("[App] Sessions geladen:", mapped.length, "Erste Session:", mapped[0]);
+        console.log("[App] Sessions geladen:", mapped.length);
       } catch (err: any) {
-        console.warn("[App] Sessions laden fehlgeschlagen:", err.message);
+        console.error("[App] Sessions laden FEHLER:", err);
       }
 
       // 4. Dashboard Jobs laden (von Dashboard API, nicht Gateway)
