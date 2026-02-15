@@ -2374,7 +2374,7 @@ export default function App() {
       <main className="oc-main">
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
-        {view === "templates" && <TemplatesView onJobCreated={() => { api.jobs.list().then((res) => setJobs(res.jobs || [])); setView("kanban"); }} />}
+        {view === "templates" && <TemplatesView onJobCreated={() => { api.jobs.list().then((res) => setJobs(res.jobs || [])); setView("kanban"); }} gwRequest={gwRequest} />}
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}

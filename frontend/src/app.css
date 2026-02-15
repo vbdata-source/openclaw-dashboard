@@ -649,3 +649,31 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-empty p{margin-bottom:16px}
 .oc-loading{text-align:center;padding:40px;color:var(--txd)}
 .oc-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red);padding:12px 16px;border-radius:var(--r);margin-bottom:16px;font-size:13px}
+
+/* Schedule Dialog */
+.oc-schedule-dialog{max-width:450px}
+.oc-schedule-template-info{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--s2);border-radius:var(--r);margin-bottom:20px}
+.oc-schedule-icon{font-size:24px}
+
+.oc-schedule-type-buttons{display:flex;gap:8px}
+.oc-type-btn{flex:1;padding:12px;border:2px solid var(--bd);background:var(--s2);color:var(--tx);border-radius:var(--r);font-size:13px;cursor:pointer;transition:all 0.15s}
+.oc-type-btn:hover{border-color:var(--tx2)}
+.oc-type-btn.active{border-color:var(--ac);background:var(--acg);color:var(--ac)}
+
+.oc-cron-presets{display:flex;flex-direction:column;gap:8px}
+.oc-cron-presets select{flex:1}
+.oc-cron-custom{display:flex;flex-direction:column;gap:6px}
+.oc-cron-hint{font-size:11px;color:var(--txd);font-family:var(--mono)}
+
+.oc-btn-link{background:none;border:none;color:var(--ac);font-size:12px;cursor:pointer;padding:0;text-decoration:underline}
+.oc-btn-link:hover{color:var(--tx)}
+
+.oc-checkbox-label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px}
+.oc-checkbox-label input{width:18px;height:18px;accent-color:var(--ac)}
+
+/* Cron Button in Template Card */
+.oc-btn--cron{background:var(--s2);border-color:var(--blu);color:var(--blu)}
+.oc-btn--cron:hover{background:var(--blu);color:#fff}
+
+/* Templates Hint */
+.oc-templates-hint{font-size:12px;color:var(--txd);margin-bottom:16px;padding:8px 12px;background:var(--s1);border-radius:var(--r);border:1px solid var(--bd)}
