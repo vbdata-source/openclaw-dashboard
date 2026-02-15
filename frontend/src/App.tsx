@@ -171,6 +171,14 @@ function timeAgo(d: string): string {
   return `vor ${Math.floor(h / 24)}d`;
 }
 
+// Truncate text to N lines for card preview
+function truncateLines(text: string | undefined, maxLines: number): string {
+  if (!text) return "";
+  const lines = text.split("\n");
+  if (lines.length <= maxLines) return text;
+  return lines.slice(0, maxLines).join("\n") + "…";
+}
+
 // ── Kanban Board ──────────────────────────────────────────
 // ── Sortable Job Card ─────────────────────────────────────
 function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete, onOpenDetail }: {
@@ -210,7 +218,7 @@ function SortableJobCard({ job, expanded, setExpanded, onMove, onDelete, onOpenD
         <span className="oc-card-title">{job.title}</span>
         <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
       </div>
-      <p className="oc-card-desc">{job.description}</p>
+      <p className="oc-card-desc">{truncateLines(job.description, 5)}</p>
       <div className="oc-card-meta">
         {job.scheduledAt && <span className="oc-tag" title="Geplant">⏰ {new Date(job.scheduledAt).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}</span>}
         {job.channel && <span className="oc-tag">{job.channel}</span>}
@@ -527,7 +535,7 @@ function JobCardOverlay({ job }: { job: Job }) {
         <span className="oc-card-title">{job.title}</span>
         <span className="oc-prio" style={{ color: PRIO[job.priority].color, background: PRIO[job.priority].bg }}>{PRIO[job.priority].label}</span>
       </div>
-      <p className="oc-card-desc">{job.description}</p>
+      <p className="oc-card-desc">{truncateLines(job.description, 5)}</p>
     </div>
   );
 }
