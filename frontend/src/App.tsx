@@ -2042,45 +2042,67 @@ export default function App() {
       // Versuche sessions.history (korrekte API) mit Fallback zu sessions.preview
       let messages: any[] = [];
       
+      // Session hat sowohl "key" (z.B. "agent:main:main") als auch "sessionId" (UUID)
+      // Die API erwartet wahrscheinlich den sessionKey
+      console.log("[App] Loading history for session:", session.id);
+      
       try {
         const historyRes = await gwRequest("sessions.history", { 
           sessionKey: session.id,
-          limit: 50
-        });
-        messages = historyRes?.messages || historyRes?.items || [];
-        console.log("[App] sessions.history Response:", historyRes);
-      } catch (histErr) {
-        console.log("[App] sessions.history failed, trying preview:", histErr);
-        // Fallback zu sessions.preview
-        const previewRes = await gwRequest("sessions.preview", { 
-          keys: [session.id], 
           limit: 50,
-          maxChars: 500 
+          includeTools: false
         });
-        const preview = previewRes?.previews?.[0];
-        messages = preview?.items || [];
+        console.log("[App] sessions.history Response:", historyRes);
+        messages = historyRes?.messages || historyRes?.items || historyRes || [];
+        if (!Array.isArray(messages)) messages = [];
+      } catch (histErr: any) {
+        console.log("[App] sessions.history failed:", histErr?.message || histErr);
+        // Fallback: Versuche mit sessions.preview
+        try {
+          const previewRes = await gwRequest("sessions.preview", { 
+            keys: [session.id], 
+            limit: 50,
+            maxChars: 500 
+          });
+          console.log("[App] sessions.preview Response:", previewRes);
+          const preview = previewRes?.previews?.[0];
+          messages = preview?.items || [];
+        } catch (prevErr: any) {
+          console.log("[App] sessions.preview also failed:", prevErr?.message || prevErr);
+        }
       }
       
       if (messages.length > 0) {
-        setSessionPreview(messages.map((item: any) => {
-          // Handle verschiedene Content-Formate
-          let text = "";
-          const content = item.content;
-          if (Array.isArray(content)) {
-            text = content.map((c: any) => c.text || "").join("");
-          } else if (typeof content === "string") {
-            text = content;
-          } else {
-            text = item.text || "";
-          }
-          
-          return {
-            role: item.role || "user",
-            text: text.slice(0, 500),
-            ts: item.ts || item.timestamp,
-          };
-        }));
+        const parsed = messages
+          .filter((item: any) => item.role === "user" || item.role === "assistant")
+          .map((item: any) => {
+            // Handle verschiedene Content-Formate
+            let text = "";
+            const content = item.content;
+            if (Array.isArray(content)) {
+              // Filter nur text-Einträge, ignoriere toolCalls und thinking
+              text = content
+                .filter((c: any) => c.type === "text")
+                .map((c: any) => c.text || "")
+                .join("");
+            } else if (typeof content === "string") {
+              text = content;
+            } else {
+              text = item.text || "";
+            }
+            
+            return {
+              role: item.role as "user" | "assistant",
+              text: text.slice(0, 500) || "(kein Text)",
+              ts: item.ts || item.timestamp,
+            };
+          })
+          .filter((msg: any) => msg.text && msg.text !== "(kein Text)");
+        
+        console.log("[App] Parsed messages:", parsed.length);
+        setSessionPreview(parsed);
       } else {
+        console.log("[App] No messages to parse");
         setSessionPreview([]);
       }
     } catch (err) {
