@@ -562,3 +562,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .oc-settings__restart-btn:hover{filter:brightness(1.15)}
 .oc-settings__restart-btn:disabled{opacity:0.5;cursor:not-allowed}
 
+
+/* Permanent Restart Button */
+.oc-btn-restart{background:transparent;color:var(--ylw);border:1px solid var(--ylw);padding:8px 14px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:var(--mono)}
+.oc-btn-restart:hover{background:var(--ylw);color:#000}
+.oc-btn-restart:disabled{opacity:0.5;cursor:not-allowed}
+

@@ -752,6 +752,14 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
           >
             {saving ? "⏳ Speichern..." : (dirty || authProfilesDirty) ? "💾 Speichern" : "✓ Gespeichert"}
           </button>
+          <button
+            className="oc-btn-restart"
+            onClick={handleRestart}
+            disabled={restarting}
+            title="Gateway neustarten"
+          >
+            {restarting ? "⏳" : "🔄"} Restart
+          </button>
         </div>
       </div>
 
