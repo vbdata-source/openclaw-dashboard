@@ -395,17 +395,51 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Gateway Control ───────────────────────────────────────
+// Restart uses WebSocket RPC instead of HTTP
 api.post("/gateway/restart", sensitiveLimiter, async (req, res) => {
   try {
     const { reason } = req.body || {};
-    const data = await gatewayFetch("/__openclaw__/restart", {
-      method: "POST",
-      body: JSON.stringify({ 
-        reason: reason || "Dashboard restart request",
-        delayMs: 500 
-      }),
+    // Use WebSocket to send restart command
+    const wsUrl = config.gatewayWs;
+    
+    // Create a temporary WebSocket connection for the restart command
+    const ws = new WebSocket(wsUrl);
+    
+    const timeout = setTimeout(() => {
+      ws.close();
+      res.status(504).json({ error: "Gateway restart timeout" });
+    }, 10000);
+    
+    ws.on("open", () => {
+      // Send restart request via WebSocket RPC
+      const requestId = `restart-${Date.now()}`;
+      ws.send(JSON.stringify({
+        type: "request",
+        id: requestId,
+        method: "gateway.restart",
+        params: {
+          reason: reason || "Dashboard restart request",
+          delayMs: 500
+        }
+      }));
     });
-    res.json({ ok: true, ...data });
+    
+    ws.on("message", (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "response" || msg.type === "result" || msg.ok !== undefined) {
+          clearTimeout(timeout);
+          ws.close();
+          res.json({ ok: true, ...msg });
+        }
+      } catch {}
+    });
+    
+    ws.on("error", (err) => {
+      clearTimeout(timeout);
+      res.status(502).json({ error: "Gateway WebSocket Fehler", detail: err.message });
+    });
+    
   } catch (err) {
     res.status(502).json({ error: "Gateway konnte nicht neugestartet werden", detail: err.message });
   }
