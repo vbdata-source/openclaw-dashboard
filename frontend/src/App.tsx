@@ -2028,6 +2028,7 @@ export default function App() {
   const [memory, setMemory] = useState<MemoryEntry[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [cfg, setCfg] = useState<any>({});
+  const [cfgHash, setCfgHash] = useState<string>("");
   const [dataLoading, setDataLoading] = useState(false);
   const [jobsLoading, setJobsLoading] = useState(false);
 
@@ -2154,7 +2155,8 @@ export default function App() {
         const res = await gwRequest("config.get");
         configData = res?.config || res || {};
         setCfg(configData);
-        console.log("[App] Config geladen:", Object.keys(configData));
+        if (res?.hash) setCfgHash(res.hash);
+        console.log("[App] Config geladen:", Object.keys(configData), "hash:", res?.hash?.slice(0, 8));
       } catch (err: any) {
         console.warn("[App] Config laden fehlgeschlagen:", err.message);
       }
@@ -2386,7 +2388,7 @@ export default function App() {
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
-        {view === "settings" && <SettingsView config={cfg} onConfigChange={(c) => { setCfg(c); }} loading={dataLoading} gwRequest={gwRequest} />}
+        {view === "settings" && <SettingsView config={cfg} configHash={cfgHash} onConfigChange={(c, h) => { setCfg(c); if (h) setCfgHash(h); }} loading={dataLoading} gwRequest={gwRequest} />}
       </main>
     </div>
   );

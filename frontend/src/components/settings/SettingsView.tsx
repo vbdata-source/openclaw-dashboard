@@ -17,7 +17,8 @@ interface AuthProfile {
 
 interface SettingsViewProps {
   config: any;
-  onConfigChange: (config: any) => void;
+  configHash?: string;
+  onConfigChange: (config: any, newHash?: string) => void;
   loading?: boolean;
   gwRequest?: (method: string, params?: any) => Promise<any>;
 }
@@ -115,7 +116,7 @@ function setPath(obj: any, path: string, value: any): any {
 }
 
 // ── Main Component ────────────────────────────────────────
-export function SettingsView({ config, onConfigChange, loading, gwRequest }: SettingsViewProps) {
+export function SettingsView({ config, configHash, onConfigChange, loading, gwRequest }: SettingsViewProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>("agents");
   const [localConfig, setLocalConfig] = useState<any>(config || {});
   const [dirty, setDirty] = useState(false);
@@ -187,9 +188,16 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
         if (!gwRequest) {
           throw new Error("WebSocket nicht verbunden");
         }
-        await gwRequest("config.patch", { raw: JSON.stringify(localConfig) });
+        if (!configHash) {
+          throw new Error("Config-Hash fehlt - bitte Seite neu laden");
+        }
+        const res = await gwRequest("config.patch", { 
+          raw: JSON.stringify(localConfig),
+          baseHash: configHash
+        });
         setDirty(false);
-        onConfigChange(localConfig);
+        // Pass new hash back to parent
+        onConfigChange(localConfig, res?.hash);
       }
       
       // Save auth profiles if dirty
@@ -206,7 +214,7 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
     } finally {
       setSaving(false);
     }
-  }, [localConfig, authProfiles, dirty, authProfilesDirty, onConfigChange, gwRequest]);
+  }, [localConfig, authProfiles, dirty, authProfilesDirty, onConfigChange, gwRequest, configHash]);
 
   // Discard changes
   const handleDiscard = useCallback(async () => {
