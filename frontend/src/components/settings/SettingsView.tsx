@@ -176,28 +176,25 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
     }
   }, [config]);
 
-  // Restart handler - uses WebSocket RPC directly
+  // Restart handler - uses HTTP API for restart
   const handleRestart = useCallback(async () => {
     if (!confirm("Gateway wirklich neustarten?\n\nLaufende Sessions werden kurz unterbrochen.")) {
       return;
     }
     
-    if (!gwRequest) {
-      alert("❌ WebSocket nicht verbunden. Bitte Seite neu laden.");
-      return;
-    }
-    
     setRestarting(true);
     try {
-      // Use WebSocket RPC with delayMs to allow response before restart
-      const res = await gwRequest("gateway.restart", {
-        reason: "Dashboard restart button",
-        delayMs: 3000
-      });
+      // Use HTTP API - backend triggers restart via config re-apply
+      const res = await api.gateway.restart("Dashboard restart button");
       
       if (res?.ok) {
         setShowRestartBanner(false);
-        alert("✅ Gateway wird in 3 Sekunden neugestartet...");
+        alert("✅ Gateway wird neugestartet...\n\nDie Seite verbindet sich automatisch neu.");
+        // Give gateway time to restart, then reload
+        setTimeout(() => window.location.reload(), 5000);
+      } else if (res?.instructions) {
+        // Fallback instructions if direct restart not possible
+        alert("⚠️ Manueller Restart nötig:\n\n" + res.instructions.join("\n"));
       } else {
         alert("⚠️ Restart-Antwort: " + JSON.stringify(res));
       }
@@ -211,7 +208,7 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
     } finally {
       setRestarting(false);
     }
-  }, [gwRequest]);
+  }, []);
 
   // Get field value helper
   const getValue = useCallback((path: string) => getPath(localConfig, path), [localConfig]);

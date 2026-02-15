@@ -395,22 +395,75 @@ api.put("/config", sensitiveLimiter, async (req, res) => {
 });
 
 // ── Gateway Control ───────────────────────────────────────
-// Restart not directly available from Dashboard container
-// Returns instructions for manual restart
+// Restart via config re-apply (triggers SIGUSR1 internally)
 api.post("/gateway/restart", sensitiveLimiter, async (req, res) => {
-  // Dashboard can't directly restart Gateway (different container/process)
-  // Return helpful instructions instead
-  res.status(501).json({ 
-    ok: false,
-    error: "Direkter Restart nicht möglich",
-    message: "Das Dashboard kann den Gateway nicht direkt neustarten (separater Container).",
-    instructions: [
-      "Option 1: In Coolify → OpenClaw Service → Restart",
-      "Option 2: SSH zum Server → docker restart <openclaw-container>",
-      "Option 3: openclaw gateway restart (auf dem Host)"
-    ],
-    hint: "Config-Änderungen werden beim nächsten Gateway-Start übernommen."
-  });
+  const { reason } = req.body;
+  console.log(`[Gateway] Restart requested: ${reason || "no reason"}`);
+  
+  try {
+    // Method 1: Try direct restart endpoint
+    try {
+      const restartRes = await fetch(`${config.gatewayHttp}/__openclaw__/restart`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(config.gatewayToken && { Authorization: `Bearer ${config.gatewayToken}` }),
+        },
+        body: JSON.stringify({ reason, delayMs: 2000 }),
+      });
+      
+      if (restartRes.ok) {
+        const data = await restartRes.json();
+        console.log("[Gateway] Direct restart successful:", data);
+        return res.json({ ok: true, method: "direct", ...data });
+      }
+    } catch (e) {
+      console.log("[Gateway] Direct restart not available, trying config reload...");
+    }
+    
+    // Method 2: Config reload (re-apply triggers restart)
+    const configRes = await gatewayFetch("/__openclaw__/config");
+    if (configRes && typeof configRes === "object") {
+      // Re-save config to trigger reload
+      const saveRes = await gatewayFetch("/__openclaw__/config", {
+        method: "PUT",
+        body: JSON.stringify(configRes),
+      });
+      
+      if (saveRes) {
+        console.log("[Gateway] Config re-applied for restart");
+        return res.json({ 
+          ok: true, 
+          method: "config-reload",
+          message: "Config neu geladen - Gateway sollte neustarten" 
+        });
+      }
+    }
+    
+    // Fallback: Manual instructions
+    console.log("[Gateway] Restart methods failed, returning instructions");
+    res.json({ 
+      ok: false,
+      error: "Automatischer Restart nicht möglich",
+      message: "Das Dashboard konnte den Gateway nicht direkt neustarten.",
+      instructions: [
+        "Option 1: In Coolify → OpenClaw Service → Restart",
+        "Option 2: SSH zum Server → docker restart <openclaw-container>",
+        "Option 3: openclaw gateway restart (auf dem Host)"
+      ],
+      hint: "Config-Änderungen werden beim nächsten Gateway-Start übernommen."
+    });
+  } catch (err) {
+    console.error("[Gateway] Restart error:", err);
+    res.status(500).json({ 
+      ok: false, 
+      error: err.message,
+      instructions: [
+        "Option 1: In Coolify → OpenClaw Service → Restart",
+        "Option 2: SSH zum Server → docker restart <openclaw-container>"
+      ]
+    });
+  }
 });
 
 // ── Auth Profiles ─────────────────────────────────────────
