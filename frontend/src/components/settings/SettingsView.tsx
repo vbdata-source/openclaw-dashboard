@@ -182,9 +182,12 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
     setSaving(true);
     setSaveError(null);
     try {
-      // Save main config if dirty
+      // Save main config if dirty (use WebSocket RPC for config.patch)
       if (dirty) {
-        await api.config.update(localConfig);
+        if (!gwRequest) {
+          throw new Error("WebSocket nicht verbunden");
+        }
+        await gwRequest("config.patch", { raw: JSON.stringify(localConfig) });
         setDirty(false);
         onConfigChange(localConfig);
       }
@@ -203,7 +206,7 @@ export function SettingsView({ config, onConfigChange, loading, gwRequest }: Set
     } finally {
       setSaving(false);
     }
-  }, [localConfig, authProfiles, dirty, authProfilesDirty, onConfigChange]);
+  }, [localConfig, authProfiles, dirty, authProfilesDirty, onConfigChange, gwRequest]);
 
   // Discard changes
   const handleDiscard = useCallback(async () => {
