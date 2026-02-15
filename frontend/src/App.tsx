@@ -1193,8 +1193,9 @@ function mapSessionsResponse(payload: any): SessionEntry[] {
     // "main" als Channel-Name -> "multi" (bedient mehrere Kanäle)
     if (channel === "main") channel = "multi";
     
-    // Sender aus verschiedenen Quellen
-    const sender = s.sender 
+    // Sender aus verschiedenen Quellen - origin.label hat den echten Namen!
+    const sender = s.origin?.label  // "Juergen Viertbauer id:5249745642"
+      || s.sender 
       || s.peer 
       || s.from 
       || s.deliveryContext?.to 

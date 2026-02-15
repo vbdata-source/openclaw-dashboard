@@ -72,6 +72,11 @@ function formatDuration(startStr: string, endStr?: string): string {
 
 // Helper: Extract readable name from session ID
 function extractName(sessionId: string, sender: string): string {
+  // If sender contains "id:" extract the name part (e.g. "Juergen Viertbauer id:123" -> "Juergen Viertbauer")
+  if (sender && sender.includes(" id:")) {
+    return sender.split(" id:")[0];
+  }
+  
   // If sender looks like a real name, use it
   if (sender && !sender.includes(":") && !sender.match(/^[\d+]+$/)) {
     return sender;
