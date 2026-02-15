@@ -94,9 +94,6 @@ function SessionDetailPanel({ session, preview, loading, onClose }: {
       {/* Stats Bar */}
       <div className="oc-session-detail__stats">
         <div className="oc-session-detail__stat">
-          <span>💬</span> {session.messages >= 0 ? session.messages : "—"} Messages
-        </div>
-        <div className="oc-session-detail__stat">
           <span>🎫</span> {(session.tokens / 1000).toFixed(1)}k Tokens
         </div>
         <div className="oc-session-detail__stat">
@@ -240,7 +237,6 @@ export function SessionsView({
         {/* Stats Row */}
         <div className="oc-sessions-stats">
           <StatCard icon="🤖" value={stats.total} label="Sessions" />
-          <StatCard icon="💬" value={stats.totalMessages >= 0 ? stats.totalMessages : "—"} label="Messages" />
           <StatCard icon="🎫" value={`${(stats.totalTokens / 1000).toFixed(1)}k`} label="Tokens" />
           <StatCard icon="📡" value={stats.channels} label="Kanäle" />
         </div>
