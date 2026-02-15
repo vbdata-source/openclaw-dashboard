@@ -2375,7 +2375,7 @@ export default function App() {
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
-        {view === "settings" && <SettingsView config={cfg} onConfigChange={(c) => { setCfg(c); }} loading={dataLoading} />}
+        {view === "settings" && <SettingsView config={cfg} onConfigChange={(c) => { setCfg(c); }} loading={dataLoading} gwRequest={gwRequest} />}
       </main>
     </div>
   );

@@ -19,6 +19,7 @@ interface SettingsViewProps {
   config: any;
   onConfigChange: (config: any) => void;
   loading?: boolean;
+  gwRequest?: (method: string, params?: any) => Promise<any>;
 }
 
 type SectionKey = "agents" | "auth" | "channels" | "gateway" | "tools" | "plugins" | "advanced";
@@ -71,7 +72,7 @@ function setPath(obj: any, path: string, value: any): any {
 }
 
 // ── Main Component ────────────────────────────────────────
-export function SettingsView({ config, onConfigChange, loading }: SettingsViewProps) {
+export function SettingsView({ config, onConfigChange, loading, gwRequest }: SettingsViewProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>("agents");
   const [localConfig, setLocalConfig] = useState<any>(config || {});
   const [dirty, setDirty] = useState(false);
@@ -175,54 +176,42 @@ export function SettingsView({ config, onConfigChange, loading }: SettingsViewPr
     }
   }, [config]);
 
-  // Restart handler
+  // Restart handler - uses WebSocket RPC directly
   const handleRestart = useCallback(async () => {
-    if (!confirm("Gateway wirklich neustarten? Laufende Sessions werden kurz unterbrochen.")) {
+    if (!confirm("Gateway wirklich neustarten?\n\nLaufende Sessions werden kurz unterbrochen.")) {
       return;
     }
+    
+    if (!gwRequest) {
+      alert("❌ WebSocket nicht verbunden. Bitte Seite neu laden.");
+      return;
+    }
+    
     setRestarting(true);
     try {
-      const res = await api.gateway.restart("Settings changed via Dashboard");
-      if (res.ok) {
+      // Use WebSocket RPC with delayMs to allow response before restart
+      const res = await gwRequest("gateway.restart", {
+        reason: "Dashboard restart button",
+        delayMs: 3000
+      });
+      
+      if (res?.ok) {
         setShowRestartBanner(false);
-        alert("✅ Gateway wird neugestartet...");
+        alert("✅ Gateway wird in 3 Sekunden neugestartet...");
       } else {
-        // Show instructions modal
-        alert(
-          "ℹ️ Gateway-Restart\n\n" +
-          "Das Dashboard kann den Gateway nicht direkt neustarten.\n\n" +
-          "Optionen:\n" +
-          "• Coolify → OpenClaw Service → Restart\n" +
-          "• SSH: docker restart <container>\n" +
-          "• CLI: openclaw gateway restart\n\n" +
-          "Config-Änderungen werden beim nächsten Start übernommen."
-        );
+        alert("⚠️ Restart-Antwort: " + JSON.stringify(res));
       }
     } catch (err: any) {
-      // Parse error response for instructions
-      const errorData = err.instructions ? err : null;
-      if (errorData?.instructions) {
-        alert(
-          "ℹ️ Gateway-Restart\n\n" +
-          (errorData.message || "Direkter Restart nicht möglich.") + "\n\n" +
-          "Optionen:\n" +
-          errorData.instructions.map((i: string) => "• " + i).join("\n") + "\n\n" +
-          (errorData.hint || "")
-        );
-      } else {
-        alert(
-          "ℹ️ Gateway-Restart\n\n" +
-          "Direkter Restart nicht möglich (separater Container).\n\n" +
-          "Optionen:\n" +
-          "• Coolify → OpenClaw Service → Restart\n" +
-          "• SSH: docker restart <container>\n" +
-          "• CLI: openclaw gateway restart"
-        );
-      }
+      console.error("Restart error:", err);
+      alert(
+        "❌ Restart fehlgeschlagen\n\n" +
+        (err.message || "Unbekannter Fehler") + "\n\n" +
+        "Alternative: Coolify → OpenClaw → Restart"
+      );
     } finally {
       setRestarting(false);
     }
-  }, []);
+  }, [gwRequest]);
 
   // Get field value helper
   const getValue = useCallback((path: string) => getPath(localConfig, path), [localConfig]);
