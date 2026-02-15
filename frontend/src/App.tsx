@@ -2138,7 +2138,9 @@ export default function App() {
       // 3. Sessions laden
       try {
         const res = await gwRequest("sessions.list");
-        console.log("[App] sessions.list RAW:", res);
+        const rawSessions = res?.sessions || [];
+        console.log("[App] sessions.list - Erste Session RAW:", rawSessions[0]);
+        console.log("[App] sessions.list - Session Keys:", rawSessions[0] ? Object.keys(rawSessions[0]) : []);
         const mapped = mapSessionsResponse(res);
         setSessions(mapped);
         console.log("[App] Sessions geladen:", mapped.length);
