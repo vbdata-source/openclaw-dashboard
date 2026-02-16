@@ -61,7 +61,10 @@ class JobExecutor {
     }
 
     console.log("[JobExecutor] Connecting to Gateway:", this.config.gatewayWs);
-    this.ws = new WebSocket(this.config.gatewayWs);
+    // Origin-Header setzen für Gateway CORS-Check
+    this.ws = new WebSocket(this.config.gatewayWs, {
+      headers: { Origin: "https://dashboard.vbdata-cloud.at" },
+    });
 
     this.ws.on("open", () => {
       console.log("[JobExecutor] WebSocket open, sending connect frame...");

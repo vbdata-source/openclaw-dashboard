@@ -1155,7 +1155,10 @@ wss.on("connection", (clientWs, request) => {
   console.log(`[WS] Dashboard-Client verbunden (active: ${wsConnectionsActive})`);
 
   // Verbindung zum OpenClaw Gateway aufbauen (kein Token in URL — kommt im connect-Frame)
-  const gatewayWs = new WebSocket(config.gatewayWs);
+  // Origin-Header setzen für Gateway CORS-Check
+  const gatewayWs = new WebSocket(config.gatewayWs, {
+    headers: { Origin: "https://dashboard.vbdata-cloud.at" },
+  });
   let gatewayConnected = false;
   let handshakePhase = true; // true bis hello-ok empfangen
   let connectTimeout = null;
