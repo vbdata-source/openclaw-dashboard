@@ -1257,13 +1257,17 @@ wss.on("connection", (clientWs, request) => {
         handshakePhase = false;
         gatewayConnected = true;
         if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-        console.log("[WS] ✅ Gateway-Handshake erfolgreich (hello-ok)");
+        
+        // Version aus hello-ok payload extrahieren
+        const serverVersion = msg.payload?.server?.version || null;
+        console.log("[WS] ✅ Gateway-Handshake erfolgreich (hello-ok), version:", serverVersion);
 
-        // Status an Dashboard-Client senden
+        // Status an Dashboard-Client senden (inkl. Version)
         clientWs.send(
           JSON.stringify({
             type: "gateway:status",
             status: "connected",
+            version: serverVersion,
             timestamp: new Date().toISOString(),
           })
         );

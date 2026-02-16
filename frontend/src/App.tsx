@@ -2166,13 +2166,11 @@ export default function App() {
       try {
         const res = await gwRequest("status");
         statusData = res || {};
-        if (res?.version) setGatewayVersion(res.version);
         console.log("[App] Status geladen:", statusData);
       } catch {
         try {
           const res = await gwRequest("health");
           statusData = res || {};
-          if (res?.version) setGatewayVersion(res.version);
           console.log("[App] Health geladen:", statusData);
         } catch (err: any) {
           console.warn("[App] Status/Health fehlgeschlagen:", err.message);
@@ -2218,6 +2216,12 @@ export default function App() {
   useEffect(() => {
     if (!wsEvents.length) return;
     const latest = wsEvents[0];
+
+    // Gateway-Version aus connect-Event extrahieren
+    if (latest.type === "gateway:status" && latest.status === "connected" && latest.version) {
+      setGatewayVersion(latest.version);
+      console.log("[App] Gateway version:", latest.version);
+    }
 
     // Session-Updates live verarbeiten
     if (latest.event === "session.started" || latest.event === "session.updated") {
