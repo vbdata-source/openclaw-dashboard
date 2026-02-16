@@ -2029,6 +2029,7 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [cfg, setCfg] = useState<any>({});
   const [cfgHash, setCfgHash] = useState<string>("");
+  const [gatewayVersion, setGatewayVersion] = useState<string>("");
   const [dataLoading, setDataLoading] = useState(false);
   const [jobsLoading, setJobsLoading] = useState(false);
 
@@ -2165,11 +2166,13 @@ export default function App() {
       try {
         const res = await gwRequest("status");
         statusData = res || {};
+        if (res?.version) setGatewayVersion(res.version);
         console.log("[App] Status geladen:", statusData);
       } catch {
         try {
           const res = await gwRequest("health");
           statusData = res || {};
+          if (res?.version) setGatewayVersion(res.version);
           console.log("[App] Health geladen:", statusData);
         } catch (err: any) {
           console.warn("[App] Status/Health fehlgeschlagen:", err.message);
@@ -2364,7 +2367,10 @@ export default function App() {
       <header className="oc-header">
         <div className="oc-header-l">
           <span className="oc-logo">🦞</span>
-          <h1 className="oc-brand">OpenClaw Dashboard</h1>
+          <div className="oc-brand-group">
+            <h1 className="oc-brand">OpenClaw Dashboard</h1>
+            {gatewayVersion && <span className="oc-version">v{gatewayVersion}</span>}
+          </div>
           <span className={`oc-conn oc-conn--${wsStatus}`}><span className="oc-conn-dot" />{wsStatus === "connected" ? "Gateway verbunden" : wsStatus === "connecting" ? "Verbinde..." : "Getrennt"}</span>
         </div>
         <div className="oc-header-r">
