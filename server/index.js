@@ -1193,7 +1193,7 @@ wss.on("connection", (clientWs, request) => {
       id: `dashboard-${Date.now()}`,
       params: {
         minProtocol: 3,
-        maxProtocol: 3,
+        maxProtocol: 5,
         client: {
           id: "openclaw-control-ui",
           version: "1.0.0",
