@@ -736,3 +736,65 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 .episode-name{font-size:15px;font-weight:500;margin-bottom:6px}
 .episode-source{font-size:12px;color:var(--txd);margin-bottom:8px}
 .episode-preview{font-size:13px;color:var(--tx2);line-height:1.4;max-height:60px;overflow:hidden}
+
+/* ============================================================
+   RAG View — Enhanced Styles (Phase 2)
+   ============================================================ */
+
+/* Clickable Cards */
+.rag-fact-card.clickable,
+.rag-node-card.clickable,
+.rag-episode-card.clickable{cursor:pointer;transition:all 0.15s ease}
+.rag-fact-card.clickable:hover,
+.rag-node-card.clickable:hover,
+.rag-episode-card.clickable:hover{border-color:var(--ac);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.15)}
+
+.card-hint{font-size:11px;color:var(--txd);margin-top:8px;opacity:0;transition:opacity 0.15s}
+.rag-fact-card.clickable:hover .card-hint,
+.rag-node-card.clickable:hover .card-hint{opacity:1}
+
+.results-count{font-size:13px;color:var(--txd);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+
+/* Ask Tab */
+.rag-ask{display:flex;flex-direction:column;gap:16px}
+.rag-answer-container{display:flex;flex-direction:column;gap:16px}
+.rag-answer{background:linear-gradient(135deg,var(--s1),var(--s2));border:1px solid var(--ac);border-radius:var(--r);padding:20px}
+.answer-header{font-size:14px;font-weight:600;color:var(--ac);margin-bottom:12px}
+.answer-text{font-size:15px;line-height:1.6;white-space:pre-wrap}
+
+.rag-sources{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.sources-header{font-size:13px;font-weight:500;margin-bottom:10px;color:var(--tx2)}
+.sources-list{display:flex;flex-wrap:wrap;gap:8px}
+.source-tag{background:var(--s2);border:1px solid var(--bd);padding:4px 10px;border-radius:12px;font-size:12px}
+
+.rag-related-facts{margin-top:8px}
+.related-header{font-size:13px;font-weight:500;margin-bottom:10px;color:var(--tx2)}
+
+/* Episodes Grid */
+.episodes-grid{display:flex;flex-direction:column;gap:8px}
+.rag-episode-card{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.episode-icon{font-size:24px}
+.episode-info{flex:1;min-width:0}
+.episode-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.episode-source{font-size:12px;color:var(--txd);margin-top:2px}
+.episode-group{font-size:11px;color:var(--ac);margin-top:4px}
+.refresh-btn{background:var(--s2);border:1px solid var(--bd);padding:6px 12px;border-radius:var(--r);cursor:pointer;font-size:13px}
+.refresh-btn:hover{border-color:var(--ac)}
+
+/* Modal */
+.rag-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.rag-modal{background:var(--bg);border:1px solid var(--bd);border-radius:12px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.3)}
+.modal-close{position:absolute;top:12px;right:12px;background:var(--s2);border:1px solid var(--bd);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--red);border-color:var(--red);color:#fff}
+.modal-content{padding:24px}
+.modal-content h3{margin:0 0 20px 0;font-size:18px;font-weight:600}
+.modal-field{margin-bottom:16px}
+.modal-field label{display:block;font-size:12px;color:var(--txd);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
+.modal-value{font-size:15px;line-height:1.5}
+.modal-value.large{font-size:18px;font-weight:500}
+.modal-value.mono{font-family:var(--mono);font-size:12px;color:var(--txd);word-break:break-all}
+.modal-value.relation{display:flex;align-items:center;gap:8px}
+.rel-source,.rel-target{background:var(--acg);color:var(--ac);padding:4px 12px;border-radius:12px;font-size:14px}
+.rel-arrow{color:var(--txd)}
+.modal-value.content-preview{background:var(--s1);padding:12px;border-radius:var(--r);font-size:13px;max-height:200px;overflow-y:auto;white-space:pre-wrap}
+.type-tag{background:var(--acg);color:var(--ac);padding:2px 10px;border-radius:10px;font-size:13px;margin-right:6px}
