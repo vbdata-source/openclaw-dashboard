@@ -50,6 +50,7 @@ export function RagView() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
   
   // Results
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -76,10 +77,15 @@ export function RagView() {
     
     try {
       const data = await api.rag.search(query, 20);
-      setFacts(data.results || []);
+      // Handle nested response: {results: {facts: [], message: ""}}
+      const results = data.results;
+      const factsArray = Array.isArray(results) ? results : (results?.facts || []);
+      setFacts(factsArray);
+      setHasSearched(true);
     } catch (err: any) {
       setError(err.message);
       setFacts([]);
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
@@ -94,10 +100,15 @@ export function RagView() {
     
     try {
       const data = await api.rag.nodes(query, 20);
-      setNodes(data.results || []);
+      // Handle nested response: {results: {nodes: [], message: ""}}
+      const results = data.results;
+      const nodesArray = Array.isArray(results) ? results : (results?.nodes || []);
+      setNodes(nodesArray);
+      setHasSearched(true);
     } catch (err: any) {
       setError(err.message);
       setNodes([]);
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
@@ -110,7 +121,10 @@ export function RagView() {
     
     try {
       const data = await api.rag.episodes(100);
-      setEpisodes(data.episodes || []);
+      // Handle nested response: {episodes: {episodes: [], message: ""}}
+      const eps = data.episodes;
+      const epsArray = Array.isArray(eps) ? eps : (eps?.episodes || []);
+      setEpisodes(epsArray);
     } catch (err: any) {
       setError(err.message);
       setEpisodes([]);
@@ -232,7 +246,9 @@ export function RagView() {
               <div className="rag-loading">Suche läuft...</div>
             ) : facts.length === 0 ? (
               <div className="rag-empty">
-                {query ? "Keine Ergebnisse gefunden." : "Gib eine Frage ein und drücke Enter."}
+                {hasSearched 
+                  ? "📭 Keine Ergebnisse gefunden." 
+                  : "🔍 Gib eine Frage ein und drücke Enter."}
               </div>
             ) : (
               facts.map((fact, idx) => (
@@ -265,7 +281,9 @@ export function RagView() {
               <div className="rag-loading">Suche läuft...</div>
             ) : nodes.length === 0 ? (
               <div className="rag-empty">
-                {query ? "Keine Entities gefunden." : "Suche nach Entities (Personen, Systeme, Konzepte)."}
+                {hasSearched 
+                  ? "📭 Keine Entities gefunden." 
+                  : "🔍 Suche nach Entities (Personen, Systeme, Konzepte)."}
               </div>
             ) : (
               nodes.map((node, idx) => (
