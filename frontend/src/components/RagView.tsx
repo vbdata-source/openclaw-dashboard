@@ -86,12 +86,12 @@ export function RagView() {
     }
   }, []);
 
-  // AI-Antwort generieren (via Job)
+  // AI-Antwort generieren (via Job mit Polling)
   const generateAiAnswer = useCallback(async () => {
     if (!query.trim() || facts.length === 0) return;
     
     setAiAnswerLoading(true);
-    setAiAnswer(null);
+    setAiAnswer("⏳ Job wird erstellt...");
     
     try {
       // Kontext aus Facts zusammenstellen
@@ -109,11 +109,43 @@ export function RagView() {
         status: "queued" as const,
       };
       
-      const result = await api.jobs.create(jobData);
-      setAiAnswer(`✅ Job erstellt: "${result.title}"\n\nDie AI-Antwort wird im Jobs-Tab generiert. Job-ID: ${result.id}`);
+      const job = await api.jobs.create(jobData);
+      setAiAnswer(`⏳ Job erstellt, warte auf AI-Antwort...\n(Job-ID: ${job.id})`);
+      
+      // Polling für Job-Ergebnis (max 60 Sekunden)
+      const maxAttempts = 30;
+      let attempts = 0;
+      
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+          const updatedJob = await api.jobs.get(job.id);
+          
+          if (updatedJob.status === "done" && updatedJob.result) {
+            clearInterval(pollInterval);
+            setAiAnswer(updatedJob.result);
+            setAiAnswerLoading(false);
+          } else if (updatedJob.status === "failed") {
+            clearInterval(pollInterval);
+            setAiAnswer(`❌ Job fehlgeschlagen: ${updatedJob.error || "Unbekannter Fehler"}`);
+            setAiAnswerLoading(false);
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setAiAnswer(`⏱️ Timeout - Job läuft noch.\nPrüfe die Antwort im Jobs-Tab (ID: ${job.id})`);
+            setAiAnswerLoading(false);
+          } else {
+            // Status-Update
+            const statusEmoji = updatedJob.status === "running" ? "🔄" : "⏳";
+            setAiAnswer(`${statusEmoji} ${updatedJob.status === "running" ? "AI arbeitet..." : "In Warteschlange..."}\n(${attempts * 2}s / 60s)`);
+          }
+        } catch (e) {
+          // Polling-Fehler ignorieren, weitermachen
+        }
+      }, 2000); // Alle 2 Sekunden prüfen
+      
     } catch (err: any) {
       setAiAnswer(`❌ Fehler beim Erstellen des Jobs: ${err.message}`);
-    } finally {
       setAiAnswerLoading(false);
     }
   }, [query, facts, answerSources]);
