@@ -1,32 +1,114 @@
 // ============================================================
 // Graphiti Proxy — RAG Backend für Dashboard
 // ============================================================
-// Kommuniziert mit Graphiti-MCP Server für:
-//   - Semantische Suche (Facts)
-//   - Entity-Suche (Nodes)
-//   - Episode-Übersicht (importierte Dokumente)
+// Kommuniziert mit Graphiti-MCP Server (Streamable HTTP Transport)
+// Requires: Session initialization before tool calls
 // ============================================================
 
 /**
  * Graphiti-MCP Proxy Klasse
- * Kommuniziert mit dem MCP-Server über HTTP/JSON-RPC
+ * Kommuniziert mit dem MCP-Server über HTTP/JSON-RPC mit Session-Management
  */
 export class GraphitiProxy {
-  constructor(baseUrl = "http://jet-graphiti-mcp:8000") {
+  constructor(baseUrl = "http://graphiti-mcp:8000") {
     this.baseUrl = baseUrl;
     this.mcpEndpoint = `${baseUrl}/mcp`;
+    this.sessionId = null;
+    this.initPromise = null;
+  }
+
+  /**
+   * Initialisiert eine MCP Session (einmalig)
+   */
+  async initialize() {
+    // Bereits initialisiert?
+    if (this.sessionId) return this.sessionId;
+    
+    // Bereits in Initialisierung?
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        const response = await fetch(this.mcpEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2024-11-05",
+              capabilities: {},
+              clientInfo: {
+                name: "openclaw-dashboard",
+                version: "1.0.0",
+              },
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Initialize failed: HTTP ${response.status}`);
+        }
+
+        // Session-ID aus Header lesen
+        this.sessionId = response.headers.get("mcp-session-id");
+        
+        if (!this.sessionId) {
+          throw new Error("No session ID received from MCP server");
+        }
+
+        console.log(`[GraphitiProxy] Session initialized: ${this.sessionId}`);
+        return this.sessionId;
+      } catch (error) {
+        this.initPromise = null; // Reset für Retry
+        throw error;
+      }
+    })();
+
+    return this.initPromise;
+  }
+
+  /**
+   * Parst SSE Event-Stream Response
+   */
+  parseSSEResponse(text) {
+    // Format: "event: message\ndata: {...}\n\n"
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          return JSON.parse(line.substring(6));
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+    // Fallback: Try parsing entire text as JSON
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
 
   /**
    * Führt einen MCP Tool-Call aus
    */
   async callTool(toolName, args = {}) {
+    // Session sicherstellen
+    await this.initialize();
+
     try {
       const response = await fetch(this.mcpEndpoint, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream"
+          "Accept": "application/json, text/event-stream",
+          "mcp-session-id": this.sessionId,
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -40,22 +122,39 @@ export class GraphitiProxy {
       });
 
       if (!response.ok) {
+        // Session expired? Reset und Retry
+        if (response.status === 400 || response.status === 401) {
+          console.log("[GraphitiProxy] Session expired, reinitializing...");
+          this.sessionId = null;
+          this.initPromise = null;
+          await this.initialize();
+          return this.callTool(toolName, args); // Retry once
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      
+      const text = await response.text();
+      const data = this.parseSSEResponse(text);
+
+      if (!data) {
+        throw new Error("Failed to parse MCP response");
+      }
+
       if (data.error) {
         throw new Error(data.error.message || "MCP Error");
       }
 
-      // MCP Response hat content Array mit text
+      // Extract result from MCP response
       if (data.result?.content?.[0]?.text) {
         try {
           return JSON.parse(data.result.content[0].text);
         } catch {
           return data.result.content[0].text;
         }
+      }
+      
+      if (data.result?.structuredContent) {
+        return data.result.structuredContent;
       }
 
       return data.result;
@@ -124,28 +223,21 @@ export class GraphitiProxy {
   }
 
   /**
-   * Health-Check (einfacher Ping)
+   * Health-Check (einfacher Ping - ohne Session)
    */
   async ping() {
     try {
       const response = await fetch(`${this.baseUrl}/health`, {
         method: "GET",
-        timeout: 5000,
       });
       return response.ok;
     } catch {
-      // Fallback: Status-Tool probieren
-      try {
-        await this.getStatus();
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
   }
 }
 
 // Singleton-Instanz
 export const graphitiProxy = new GraphitiProxy(
-  process.env.GRAPHITI_MCP_URL || "http://jet-graphiti-mcp:8000"
+  process.env.GRAPHITI_MCP_URL || "http://graphiti-mcp:8000"
 );
