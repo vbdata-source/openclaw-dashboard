@@ -65,6 +65,8 @@ export function RagView() {
   const [answer, setAnswer] = useState<string | null>(null);
   const [answerLoading, setAnswerLoading] = useState(false);
   const [answerSources, setAnswerSources] = useState<string[]>([]);
+  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  const [aiAnswerLoading, setAiAnswerLoading] = useState(false);
   
   // Document Links
   interface DocLink { name: string; fileId: string | null; driveUrl: string | null; downloadUrl: string | null; }
@@ -83,6 +85,38 @@ export function RagView() {
       setStatus({ ok: false, error: err.message });
     }
   }, []);
+
+  // AI-Antwort generieren (via Job)
+  const generateAiAnswer = useCallback(async () => {
+    if (!query.trim() || facts.length === 0) return;
+    
+    setAiAnswerLoading(true);
+    setAiAnswer(null);
+    
+    try {
+      // Kontext aus Facts zusammenstellen
+      const context = facts.map(f => 
+        `- ${f.fact || f.fact_text || f.name || ""}`
+      ).filter(f => f !== "- ").join("\n");
+      
+      const sources = answerSources.join(", ");
+      
+      // Job erstellen für AI-Antwort
+      const jobData = {
+        title: `RAG: ${query.substring(0, 50)}${query.length > 50 ? "..." : ""}`,
+        description: `Beantworte folgende Frage basierend auf dem Knowledge Graph:\n\n**Frage:** ${query}\n\n**Relevante Fakten aus dem Knowledge Graph:**\n${context}\n\n**Quellen:** ${sources}\n\n---\nBitte formuliere eine klare, zusammenhängende Antwort auf die Frage, basierend auf den obigen Fakten. Fasse die wichtigsten Punkte zusammen.`,
+        priority: "high" as const,
+        status: "queued" as const,
+      };
+      
+      const result = await api.jobs.create(jobData);
+      setAiAnswer(`✅ Job erstellt: "${result.title}"\n\nDie AI-Antwort wird im Jobs-Tab generiert. Job-ID: ${result.id}`);
+    } catch (err: any) {
+      setAiAnswer(`❌ Fehler beim Erstellen des Jobs: ${err.message}`);
+    } finally {
+      setAiAnswerLoading(false);
+    }
+  }, [query, facts, answerSources]);
 
   // Frage beantworten (RAG)
   const askQuestion = useCallback(async () => {
@@ -369,6 +403,32 @@ export function RagView() {
                     </div>
                   </div>
                 )}
+                {/* AI Answer Button & Result */}
+                {facts.length > 0 && (
+                  <div className="rag-ai-answer">
+                    <div className="ai-answer-header">
+                      <span>🤖 AI-Zusammenfassung</span>
+                      <button 
+                        onClick={generateAiAnswer}
+                        disabled={aiAnswerLoading}
+                        className="ai-answer-btn"
+                      >
+                        {aiAnswerLoading ? "⏳ Wird erstellt..." : "✨ Antwort generieren"}
+                      </button>
+                    </div>
+                    {aiAnswer && (
+                      <div className="ai-answer-result">
+                        {aiAnswer}
+                      </div>
+                    )}
+                    {!aiAnswer && !aiAnswerLoading && (
+                      <div className="ai-answer-hint">
+                        Klicke auf "Antwort generieren" um eine zusammenhängende AI-Antwort basierend auf den gefundenen Fakten zu erhalten.
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 {facts.length > 0 && (
                   <div className="rag-related-facts">
                     <div className="related-header">🔗 Gefundene Fakten ({facts.length})</div>
