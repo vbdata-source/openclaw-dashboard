@@ -66,6 +66,10 @@ export function RagView() {
   const [answerLoading, setAnswerLoading] = useState(false);
   const [answerSources, setAnswerSources] = useState<string[]>([]);
   
+  // Document Links
+  interface DocLink { name: string; fileId: string | null; driveUrl: string | null; downloadUrl: string | null; }
+  const [documentLinks, setDocumentLinks] = useState<DocLink[]>([]);
+  
   // Detail Modal
   const [selectedItem, setSelectedItem] = useState<Fact | Node | Episode | null>(null);
   const [modalType, setModalType] = useState<"fact" | "node" | "episode" | null>(null);
@@ -87,6 +91,7 @@ export function RagView() {
     setAnswerLoading(true);
     setAnswer(null);
     setAnswerSources([]);
+    setDocumentLinks([]);
     setError(null);
     
     try {
@@ -109,6 +114,16 @@ export function RagView() {
       // Quellen sammeln
       const sources = [...new Set(factsArray.map(f => f.episode_name).filter(Boolean))] as string[];
       setAnswerSources(sources);
+      
+      // Dokument-Links laden
+      if (sources.length > 0) {
+        try {
+          const docsData = await api.rag.documents(sources);
+          setDocumentLinks(docsData.documents || []);
+        } catch (e) {
+          console.log("Could not load document links:", e);
+        }
+      }
       
       // Antwort generieren (vereinfacht - zeigt den Kontext)
       const formattedAnswer = `**Basierend auf ${factsArray.length} gefundenen Fakten:**\n\n${context}`;
@@ -326,11 +341,31 @@ export function RagView() {
                 </div>
                 {answerSources.length > 0 && (
                   <div className="rag-sources">
-                    <div className="sources-header">📚 Quellen ({answerSources.length})</div>
+                    <div className="sources-header">📚 Quelldokumente ({answerSources.length})</div>
                     <div className="sources-list">
-                      {answerSources.map((src, idx) => (
-                        <span key={idx} className="source-tag">📄 {src}</span>
-                      ))}
+                      {documentLinks.length > 0 ? (
+                        documentLinks.map((doc, idx) => (
+                          <div key={idx} className="source-doc">
+                            <span className="source-name">📄 {doc.name}</span>
+                            {doc.driveUrl ? (
+                              <div className="source-actions">
+                                <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="source-link">
+                                  👁️ Ansehen
+                                </a>
+                                <a href={doc.downloadUrl || doc.driveUrl} target="_blank" rel="noopener noreferrer" className="source-link download">
+                                  ⬇️ Download
+                                </a>
+                              </div>
+                            ) : (
+                              <span className="source-no-link">(kein Link verfügbar)</span>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        answerSources.map((src, idx) => (
+                          <span key={idx} className="source-tag">📄 {src}</span>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}

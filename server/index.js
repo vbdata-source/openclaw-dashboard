@@ -1143,6 +1143,75 @@ api.post("/rag/memory", async (req, res) => {
   }
 });
 
+// GET /api/rag/documents?names=doc1,doc2 - Get Google Drive links for documents
+api.get("/rag/documents", async (req, res) => {
+  const { names } = req.query;
+  
+  if (!names) {
+    return res.status(400).json({ error: "Query parameter 'names' required" });
+  }
+
+  try {
+    // Load imported files mapping
+    const importedFilesPath = process.env.IMPORTED_FILES_PATH || 
+      "/openclaw-workspace/workspace/config/google/imported-files.json";
+    
+    let importedFiles = {};
+    try {
+      const data = readFileSync(importedFilesPath, "utf8");
+      importedFiles = JSON.parse(data);
+    } catch (e) {
+      // File doesn't exist or isn't readable
+      console.log("[RAG] Could not read imported-files.json:", e.message);
+    }
+
+    // Build reverse lookup: fileName -> fileId
+    const fileNameToId = {};
+    for (const [fileId, info] of Object.entries(importedFiles)) {
+      if (info.fileName) {
+        // Store with and without extension for flexible matching
+        fileNameToId[info.fileName] = fileId;
+        fileNameToId[info.fileName.replace(/\.pdf$/i, "")] = fileId;
+      }
+    }
+
+    // Parse requested names
+    const requestedNames = names.split(",").map(n => n.trim()).filter(Boolean);
+    
+    // Find matching documents
+    const documents = requestedNames.map(name => {
+      // Try exact match first, then partial match
+      let fileId = fileNameToId[name] || fileNameToId[name + ".pdf"];
+      
+      // Fuzzy match if no exact match
+      if (!fileId) {
+        const lowerName = name.toLowerCase();
+        for (const [fileName, id] of Object.entries(fileNameToId)) {
+          if (fileName.toLowerCase().includes(lowerName) || 
+              lowerName.includes(fileName.toLowerCase().replace(/\.pdf$/i, ""))) {
+            fileId = id;
+            break;
+          }
+        }
+      }
+
+      if (fileId) {
+        return {
+          name,
+          fileId,
+          driveUrl: `https://drive.google.com/file/d/${fileId}/view`,
+          downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
+        };
+      }
+      return { name, fileId: null, driveUrl: null, downloadUrl: null };
+    });
+
+    res.json({ documents });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use("/api", api);
 
 // ── WebSocket Proxy ───────────────────────────────────────

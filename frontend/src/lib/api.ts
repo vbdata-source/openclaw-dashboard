@@ -324,6 +324,13 @@ export const templates = {
 };
 
 // ── RAG / Knowledge Graph ─────────────────────────────────
+export interface DocumentLink {
+  name: string;
+  fileId: string | null;
+  driveUrl: string | null;
+  downloadUrl: string | null;
+}
+
 export const rag = {
   status: () => request<{ ok: boolean; error?: string; entities?: number; episodes?: number }>("/rag/status"),
   search: (query: string, limit = 10) => 
@@ -337,6 +344,8 @@ export const rag = {
       method: "POST",
       body: JSON.stringify({ name, content }),
     }),
+  documents: (names: string[]) =>
+    request<{ documents: DocumentLink[] }>(`/rag/documents?names=${encodeURIComponent(names.join(","))}`),
 };
 
 // ── Generic Request (for custom endpoints) ────────────────
