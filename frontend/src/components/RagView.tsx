@@ -75,6 +75,9 @@ export function RagView() {
   // Detail Modal
   const [selectedItem, setSelectedItem] = useState<Fact | Node | Episode | null>(null);
   const [modalType, setModalType] = useState<"fact" | "node" | "episode" | null>(null);
+  
+  // Search Mode
+  const [exactSearch, setExactSearch] = useState(false);
 
   // Status laden
   const loadStatus = useCallback(async () => {
@@ -161,13 +164,25 @@ export function RagView() {
     setError(null);
     
     try {
-      // Erst Facts suchen
-      const data = await api.rag.search(query, 10);
+      // Erst Facts suchen (mehr holen für Filterung)
+      const data = await api.rag.search(query, exactSearch ? 50 : 10);
       const results = data.results;
-      const factsArray: Fact[] = Array.isArray(results) ? results : (results?.facts || []);
+      let factsArray: Fact[] = Array.isArray(results) ? results : (results?.facts || []);
+      
+      // Bei exakter Suche: Nur Facts die den Suchbegriff enthalten
+      if (exactSearch && factsArray.length > 0) {
+        const searchTerms = query.toUpperCase().split(/\s+/).filter(t => t.length > 2);
+        factsArray = factsArray.filter(f => {
+          const factText = (f.fact || f.fact_text || f.name || "").toUpperCase();
+          // Alle Suchbegriffe müssen im Fact vorkommen
+          return searchTerms.every(term => factText.includes(term));
+        });
+      }
       
       if (factsArray.length === 0) {
-        setAnswer("Ich konnte keine relevanten Informationen zu dieser Frage finden.");
+        setAnswer(exactSearch 
+          ? `Keine exakten Treffer für "${query}" gefunden. Versuche die semantische Suche.`
+          : "Ich konnte keine relevanten Informationen zu dieser Frage finden.");
         setHasSearched(true);
         return;
       }
@@ -382,28 +397,49 @@ export function RagView() {
 
       {/* Suchfeld (für ask, search & nodes) */}
       {activeTab !== "episodes" && (
-        <div className="rag-search-box">
-          <input
-            type="text"
-            placeholder={
-              activeTab === "ask" 
-                ? "Stelle eine Frage... (z.B. 'Was ist ein Zapfsäulenverwechsler?')"
-                : activeTab === "search"
-                ? "Nach Fakten suchen... (z.B. 'Fuel Pricing')"
-                : "Entity suchen... (z.B. 'POS', 'Kartengerät')"
-            }
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="rag-search-input"
-          />
-          <button 
-            onClick={handleSearch}
-            disabled={loading || answerLoading || !query.trim()}
-            className="rag-search-button"
-          >
+        <div className="rag-search-container">
+          <div className="rag-search-box">
+            <input
+              type="text"
+              placeholder={
+                activeTab === "ask" 
+                  ? (exactSearch ? "Exakt suchen... (z.B. 'GAP040')" : "Stelle eine Frage... (z.B. 'Was ist ein Zapfsäulenverwechsler?')")
+                  : activeTab === "search"
+                  ? "Nach Fakten suchen... (z.B. 'Fuel Pricing')"
+                  : "Entity suchen... (z.B. 'POS', 'Kartengerät')"
+              }
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="rag-search-input"
+            />
+            <button 
+              onClick={handleSearch}
+              disabled={loading || answerLoading || !query.trim()}
+              className="rag-search-button"
+            >
             {loading || answerLoading ? "⏳" : activeTab === "ask" ? "💬" : "🔍"}
-          </button>
+            </button>
+          </div>
+          {activeTab === "ask" && (
+            <div className="rag-search-options">
+              <label className="rag-toggle">
+                <input 
+                  type="checkbox" 
+                  checked={exactSearch} 
+                  onChange={(e) => setExactSearch(e.target.checked)}
+                />
+                <span className="toggle-label">
+                  {exactSearch ? "🎯 Exakte Suche" : "🔮 Semantische Suche"}
+                </span>
+              </label>
+              <span className="search-hint">
+                {exactSearch 
+                  ? "Zeigt nur Treffer die den Suchbegriff exakt enthalten" 
+                  : "Findet auch verwandte Informationen"}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
