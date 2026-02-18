@@ -22,6 +22,7 @@ import { fileURLToPath } from "url";
 import { jobStore, JobStatus } from "./jobStore.js";
 import { templateStore } from "./templateStore.js";
 import { createJobExecutor } from "./jobExecutor.js";
+import { graphitiProxy } from "./graphitiProxy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1071,6 +1072,74 @@ api.post("/templates/:id/run", sensitiveLimiter, (req, res) => {
     res.status(201).json({ job, template });
   } catch (err) {
     res.status(500).json({ error: "Job konnte nicht erstellt werden", detail: err.message });
+  }
+});
+
+// ── RAG / Graphiti API ────────────────────────────────────
+api.get("/rag/status", async (req, res) => {
+  try {
+    const status = await graphitiProxy.getStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(503).json({ ok: false, error: err.message });
+  }
+});
+
+api.get("/rag/search", async (req, res) => {
+  const { q, query, limit = "10" } = req.query;
+  const searchQuery = q || query;
+
+  if (!searchQuery) {
+    return res.status(400).json({ error: "Query parameter 'q' required" });
+  }
+
+  try {
+    const results = await graphitiProxy.searchFacts(searchQuery, parseInt(limit));
+    res.json({ query: searchQuery, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+api.get("/rag/nodes", async (req, res) => {
+  const { q, query, limit = "10" } = req.query;
+  const searchQuery = q || query;
+
+  if (!searchQuery) {
+    return res.status(400).json({ error: "Query parameter 'q' required" });
+  }
+
+  try {
+    const results = await graphitiProxy.searchNodes(searchQuery, parseInt(limit));
+    res.json({ query: searchQuery, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+api.get("/rag/episodes", async (req, res) => {
+  const { limit = "50" } = req.query;
+
+  try {
+    const episodes = await graphitiProxy.getEpisodes(parseInt(limit));
+    res.json({ episodes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+api.post("/rag/memory", async (req, res) => {
+  const { name, content } = req.body;
+
+  if (!name || !content) {
+    return res.status(400).json({ error: "Fields 'name' and 'content' required" });
+  }
+
+  try {
+    const result = await graphitiProxy.addMemory(name, content);
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

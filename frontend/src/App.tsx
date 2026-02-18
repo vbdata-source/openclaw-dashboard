@@ -29,6 +29,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { SessionsView } from "./components/SessionsView";
 import { SettingsView } from "./components/settings";
 import { TemplatesView } from "./components/TemplatesView";
+import { RagView } from "./components/RagView";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
@@ -2020,7 +2021,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
 }
 
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "templates" | "memory" | "sessions" | "chat" | "settings" | "cron";
+type View = "kanban" | "templates" | "memory" | "sessions" | "chat" | "settings" | "cron" | "rag";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -2366,6 +2367,7 @@ export default function App() {
     { key: "templates", label: "Vorlagen", icon: "📋" },
     { key: "cron", label: "Cron", icon: "🔄" },
     { key: "memory", label: "Memory", icon: "◉" },
+    { key: "rag", label: "Knowledge", icon: "🧠" },
     { key: "settings", label: "Settings", icon: "⚙️" },
   ];
 
@@ -2401,6 +2403,7 @@ export default function App() {
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
+        {view === "rag" && <RagView />}
         {view === "settings" && <SettingsView config={cfg} configHash={cfgHash} onConfigChange={(c, h) => { setCfg(c); if (h) setCfgHash(h); }} loading={dataLoading} gwRequest={gwRequest} />}
       </main>
     </div>

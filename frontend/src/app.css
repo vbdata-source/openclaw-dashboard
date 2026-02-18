@@ -679,3 +679,60 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);-webkit-font-s
 
 /* Templates Hint */
 .oc-templates-hint{font-size:12px;color:var(--txd);margin-bottom:16px;padding:8px 12px;background:var(--s1);border-radius:var(--r);border:1px solid var(--bd)}
+
+/* ============================================================
+   RAG View — Knowledge Graph Styles
+   ============================================================ */
+
+.rag-view{padding:24px;max-width:1200px;margin:0 auto}
+.rag-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.rag-header h2{margin:0;font-size:24px;font-weight:600}
+.rag-status{font-size:13px}
+.status-loading{color:var(--txd)}
+.status-ok{color:var(--grn)}
+.status-error{color:var(--red)}
+
+.rag-tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--bd);padding-bottom:12px}
+.rag-tab{background:var(--s1);border:1px solid var(--bd);padding:10px 20px;border-radius:var(--r);cursor:pointer;font-size:14px;transition:all 0.15s}
+.rag-tab:hover{background:var(--s2);border-color:var(--tx2)}
+.rag-tab.active{background:var(--acg);border-color:var(--ac);color:var(--ac)}
+
+.rag-search-box{display:flex;gap:8px;margin-bottom:20px}
+.rag-search-input{flex:1;padding:12px 16px;font-size:15px;border:1px solid var(--bd);border-radius:var(--r);background:var(--s1);color:var(--tx)}
+.rag-search-input:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--acg)}
+.rag-search-input::placeholder{color:var(--txd)}
+.rag-search-button{padding:12px 20px;background:var(--ac);color:#fff;border:none;border-radius:var(--r);cursor:pointer;font-size:16px}
+.rag-search-button:hover{opacity:0.9}
+.rag-search-button:disabled{opacity:0.5;cursor:not-allowed}
+
+.rag-error{padding:12px 16px;background:rgba(239,68,68,0.1);border:1px solid var(--red);border-radius:var(--r);color:var(--red);margin-bottom:16px}
+
+.rag-results{display:flex;flex-direction:column;gap:12px}
+.rag-loading,.rag-empty{padding:40px;text-align:center;color:var(--txd);font-size:14px}
+
+/* Fact Cards */
+.rag-fact-card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px;transition:border-color 0.15s}
+.rag-fact-card:hover{border-color:var(--ac)}
+.fact-text{font-size:15px;line-height:1.5;margin-bottom:8px}
+.fact-relation{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txd)}
+.fact-source,.fact-target{background:var(--acg);color:var(--ac);padding:2px 8px;border-radius:12px}
+.fact-arrow{color:var(--txd)}
+.fact-source-doc{font-size:12px;color:var(--txd);margin-top:8px}
+
+/* Node Cards */
+.rag-node-card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.rag-node-card:hover{border-color:var(--ac)}
+.node-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.node-name{font-size:16px;font-weight:600}
+.node-label{font-size:11px;background:var(--acg);color:var(--ac);padding:2px 8px;border-radius:10px;text-transform:uppercase}
+.node-summary{font-size:14px;color:var(--tx2);line-height:1.5}
+
+/* Episode Cards */
+.episodes-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;font-size:14px;color:var(--txd)}
+.episodes-header button{background:var(--s2);border:1px solid var(--bd);padding:6px 12px;border-radius:var(--r);cursor:pointer;font-size:13px}
+.episodes-header button:hover{border-color:var(--ac)}
+.rag-episode-card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.rag-episode-card:hover{border-color:var(--ac)}
+.episode-name{font-size:15px;font-weight:500;margin-bottom:6px}
+.episode-source{font-size:12px;color:var(--txd);margin-bottom:8px}
+.episode-preview{font-size:13px;color:var(--tx2);line-height:1.4;max-height:60px;overflow:hidden}
