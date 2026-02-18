@@ -33,6 +33,8 @@ services:
       - DASHBOARD_SECRET=${DASHBOARD_SECRET}
       - DASHBOARD_PORT=3200
       - SESSION_TIMEOUT=${SESSION_TIMEOUT:-480}
+      # ── Graphiti/RAG Knowledge Graph ──
+      - GRAPHITI_MCP_URL=${GRAPHITI_MCP_URL:-http://graphiti-mcp:8000}
     ports:
       - "${DASHBOARD_EXTERNAL_PORT:-3200}:3200"
     volumes:
@@ -43,6 +45,7 @@ services:
       - ${OPENCLAW_AGENTS_PATH:-/var/lib/docker/volumes/d48ookcc80wg8ss48kwsckws_moltbot-data/_data/agents}:/openclaw-agents
     networks:
       - openclaw-net
+      - mcp-net
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/api/health"]
       interval: 30s
@@ -58,3 +61,7 @@ networks:
     # Verbindet sich mit dem existierenden OpenClaw-Netzwerk
     external: true
     name: ${OPENCLAW_NETWORK_NAME:-coolify_default}
+  mcp-net:
+    # Verbindet sich mit dem Graphiti/MCP-Netzwerk
+    external: true
+    name: ${MCP_NETWORK_NAME:-openclaw-mcp-net}
