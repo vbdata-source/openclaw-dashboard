@@ -60,7 +60,7 @@ export function RagView() {
   // Status laden
   const loadStatus = useCallback(async () => {
     try {
-      const data = await api.get("/api/rag/status");
+      const data = await api.rag.status();
       setStatus(data);
     } catch (err: any) {
       setStatus({ ok: false, error: err.message });
@@ -75,7 +75,7 @@ export function RagView() {
     setError(null);
     
     try {
-      const data = await api.get(`/api/rag/search?q=${encodeURIComponent(query)}&limit=20`);
+      const data = await api.rag.search(query, 20);
       setFacts(data.results || []);
     } catch (err: any) {
       setError(err.message);
@@ -93,7 +93,7 @@ export function RagView() {
     setError(null);
     
     try {
-      const data = await api.get(`/api/rag/nodes?q=${encodeURIComponent(query)}&limit=20`);
+      const data = await api.rag.nodes(query, 20);
       setNodes(data.results || []);
     } catch (err: any) {
       setError(err.message);
@@ -109,7 +109,7 @@ export function RagView() {
     setError(null);
     
     try {
-      const data = await api.get("/api/rag/episodes?limit=100");
+      const data = await api.rag.episodes(100);
       setEpisodes(data.episodes || []);
     } catch (err: any) {
       setError(err.message);

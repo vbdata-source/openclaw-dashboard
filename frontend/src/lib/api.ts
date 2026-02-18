@@ -323,6 +323,27 @@ export const templates = {
     request<{ categories: string[] }>("/templates/categories"),
 };
 
+// ── RAG / Knowledge Graph ─────────────────────────────────
+export const rag = {
+  status: () => request<{ ok: boolean; error?: string; entities?: number; episodes?: number }>("/rag/status"),
+  search: (query: string, limit = 10) => 
+    request<{ query: string; results: any[] }>(`/rag/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  nodes: (query: string, limit = 10) => 
+    request<{ query: string; results: any[] }>(`/rag/nodes?q=${encodeURIComponent(query)}&limit=${limit}`),
+  episodes: (limit = 50) => 
+    request<{ episodes: any[] }>(`/rag/episodes?limit=${limit}`),
+  addMemory: (name: string, content: string) =>
+    request<{ ok: boolean; result: any }>("/rag/memory", {
+      method: "POST",
+      body: JSON.stringify({ name, content }),
+    }),
+};
+
+// ── Generic Request (for custom endpoints) ────────────────
+export const get = <T = any>(path: string) => request<T>(path);
+export const post = <T = any>(path: string, data: any) => 
+  request<T>(path, { method: "POST", body: JSON.stringify(data) });
+
 export const api = {
   auth,
   health,
@@ -337,6 +358,9 @@ export const api = {
   approvals,
   jobs,
   templates,
+  rag,
+  get,
+  post,
 };
 
 export default api;
