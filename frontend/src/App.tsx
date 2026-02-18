@@ -1562,7 +1562,8 @@ export interface CronJob {
   name?: string;
   schedule: {
     kind: "at" | "every" | "cron";
-    atMs?: number;
+    at?: string;      // ISO-String (von API)
+    atMs?: number;    // Milliseconds (legacy)
     everyMs?: number;
     anchorMs?: number;
     expr?: string;
@@ -1790,7 +1791,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       if (ms >= 60000) return `Alle ${Math.floor(ms / 60000)} Minute(n)`;
       return `Alle ${ms}ms`;
     } else if (schedule.kind === "at") {
-      return `Einmalig: ${new Date(schedule.atMs || 0).toLocaleString("de-AT")}`;
+      // Unterstütze sowohl atMs (number) als auch at (ISO-String)
+      const atValue = schedule.atMs || schedule.at;
+      return `Einmalig: ${atValue ? new Date(atValue).toLocaleString("de-AT") : "Nicht gesetzt"}`;
     }
     return "Unbekannt";
   };
