@@ -1180,16 +1180,35 @@ api.get("/rag/documents", async (req, res) => {
     
     // Find matching documents
     const documents = requestedNames.map(name => {
-      // Try exact match first, then partial match
-      let fileId = fileNameToId[name] || fileNameToId[name + ".pdf"];
+      // Clean up name: remove trailing punctuation, quotes
+      const cleanName = name.replace(/['".,;:!?]+$/g, "").trim();
+      
+      // Try exact match first
+      let fileId = fileNameToId[cleanName] || fileNameToId[cleanName + ".pdf"];
+      let matchedFileName = cleanName;
       
       // Fuzzy match if no exact match
       if (!fileId) {
-        const lowerName = name.toLowerCase();
+        const lowerName = cleanName.toLowerCase();
+        
+        // Extract GAP/JETZ number for targeted matching
+        const docNumMatch = cleanName.match(/(GAP\d+|JETZ-\d+)/i);
+        const docNum = docNumMatch ? docNumMatch[1].toUpperCase() : null;
+        
         for (const [fileName, id] of Object.entries(fileNameToId)) {
-          if (fileName.toLowerCase().includes(lowerName) || 
-              lowerName.includes(fileName.toLowerCase().replace(/\.pdf$/i, ""))) {
+          const lowerFileName = fileName.toLowerCase();
+          
+          // Match by document number (most reliable)
+          if (docNum && lowerFileName.toUpperCase().includes(docNum)) {
             fileId = id;
+            matchedFileName = fileName;
+            break;
+          }
+          
+          // Fallback: partial name match
+          if (!docNum && (lowerFileName.includes(lowerName) || lowerName.includes(lowerFileName.replace(/\.pdf$/i, "")))) {
+            fileId = id;
+            matchedFileName = fileName;
             break;
           }
         }
@@ -1197,7 +1216,7 @@ api.get("/rag/documents", async (req, res) => {
 
       if (fileId) {
         return {
-          name,
+          name: matchedFileName.replace(/\.pdf$/i, ""),
           fileId,
           driveUrl: `https://drive.google.com/file/d/${fileId}/view`,
           downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
