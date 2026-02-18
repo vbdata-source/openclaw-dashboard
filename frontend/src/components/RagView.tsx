@@ -177,8 +177,30 @@ export function RagView() {
         f.fact || f.fact_text || f.name || ""
       ).filter(Boolean).join("\n\n");
       
-      // Quellen sammeln
-      const sources = [...new Set(factsArray.map(f => f.episode_name).filter(Boolean))] as string[];
+      // Quellen sammeln - aus episode_name oder aus dem Fact-Text extrahieren
+      const extractedSources: string[] = [];
+      
+      factsArray.forEach(f => {
+        // Priorität 1: episode_name wenn vorhanden
+        if (f.episode_name) {
+          extractedSources.push(f.episode_name);
+        }
+        // Priorität 2: GAP/JETZ Dokumente aus dem Fact-Text extrahieren
+        const factText = f.fact || f.fact_text || f.name || "";
+        const docMatches = factText.match(/['"]?(GAP\d+[^'"]*?|JETZ-\d+[^'"]*?)['"]?(?:\s+is|\s+has|\s+was|\s+encompasses|')/gi);
+        if (docMatches) {
+          docMatches.forEach(match => {
+            // Clean up the match
+            const cleaned = match.replace(/^['"]|['"]$/g, "").replace(/\s+(is|has|was|encompasses|').*$/i, "").trim();
+            if (cleaned.length > 3) {
+              extractedSources.push(cleaned);
+            }
+          });
+        }
+      });
+      
+      // Unique sources
+      const sources = [...new Set(extractedSources)];
       setAnswerSources(sources);
       
       // Dokument-Links laden
