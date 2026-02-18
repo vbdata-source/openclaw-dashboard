@@ -185,17 +185,18 @@ export function RagView() {
         if (f.episode_name) {
           extractedSources.push(f.episode_name);
         }
-        // Priorität 2: GAP/JETZ Dokumente aus dem Fact-Text extrahieren
+        // Priorität 2: GAP/JETZ Dokumentnummern aus dem Fact-Text extrahieren
         const factText = f.fact || f.fact_text || f.name || "";
-        const docMatches = factText.match(/['"]?(GAP\d+[^'"]*?|JETZ-\d+[^'"]*?)['"]?(?:\s+is|\s+has|\s+was|\s+encompasses|')/gi);
-        if (docMatches) {
-          docMatches.forEach(match => {
-            // Clean up the match
-            const cleaned = match.replace(/^['"]|['"]$/g, "").replace(/\s+(is|has|was|encompasses|').*$/i, "").trim();
-            if (cleaned.length > 3) {
-              extractedSources.push(cleaned);
-            }
-          });
+        
+        // Einfaches Regex: GAP + Zahl oder JETZ- + Zahl
+        const gapMatches = factText.match(/GAP\d+/gi);
+        const jetzMatches = factText.match(/JETZ-\d+/gi);
+        
+        if (gapMatches) {
+          gapMatches.forEach(m => extractedSources.push(m.toUpperCase()));
+        }
+        if (jetzMatches) {
+          jetzMatches.forEach(m => extractedSources.push(m.toUpperCase()));
         }
       });
       
