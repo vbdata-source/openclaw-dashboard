@@ -177,23 +177,45 @@ export class GraphitiProxy {
   }
 
   /**
+   * Erkennt Projekt aus der Suchanfrage
+   */
+  detectProjectFromQuery(query) {
+    const q = query.toLowerCase();
+    
+    // Vectron-spezifische Keywords
+    if (q.includes('vectron') || q.includes('vbdata-') || q.includes('.vsc') || 
+        q.includes('orderandpay') || q.includes('remoteservice')) {
+      return ["vectron"];
+    }
+    
+    // JET-spezifische Keywords
+    if (q.includes('jet') || q.includes('gap0') || q.includes('jetz-') || 
+        q.includes('zapfsäule') || q.includes('tankstelle') || q.includes('poslog')) {
+      return ["jet_projekt"];
+    }
+    
+    // Default: beide durchsuchen
+    return ["jet_projekt", "vectron"];
+  }
+
+  /**
    * Semantische Suche nach Facts (Beziehungen)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
-   * @param {string[]} groupIds - Projekt-Filter (default: alle)
+   * @param {string[]} groupIds - Projekt-Filter (default: auto-detect)
    */
   async searchFacts(query, limit = 10, groupIds = null) {
     const args = {
       query,
       max_facts: limit,
     };
-    // Include all known groups if not specified
+    // Auto-detect project from query if not specified
     if (groupIds && groupIds.length > 0) {
       args.group_ids = groupIds;
     } else {
-      // Default: search all projects
-      args.group_ids = ["jet_projekt", "vectron"];
+      args.group_ids = this.detectProjectFromQuery(query);
     }
+    console.log(`[GraphitiProxy] searchFacts: query="${query.substring(0,50)}", groups=${args.group_ids}`);
     return this.callTool("search_memory_facts", args);
   }
 
@@ -201,20 +223,20 @@ export class GraphitiProxy {
    * Suche nach Nodes (Entities)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
-   * @param {string[]} groupIds - Projekt-Filter (default: alle)
+   * @param {string[]} groupIds - Projekt-Filter (default: auto-detect)
    */
   async searchNodes(query, limit = 10, groupIds = null) {
     const args = {
       query,
       limit,
     };
-    // Include all known groups if not specified
+    // Auto-detect project from query if not specified
     if (groupIds && groupIds.length > 0) {
       args.group_ids = groupIds;
     } else {
-      // Default: search all projects
-      args.group_ids = ["jet_projekt", "vectron"];
+      args.group_ids = this.detectProjectFromQuery(query);
     }
+    console.log(`[GraphitiProxy] searchNodes: query="${query.substring(0,50)}", groups=${args.group_ids}`);
     return this.callTool("search_nodes", args);
   }
 
