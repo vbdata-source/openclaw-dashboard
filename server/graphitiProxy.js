@@ -180,34 +180,59 @@ export class GraphitiProxy {
    * Semantische Suche nach Facts (Beziehungen)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
+   * @param {string[]} groupIds - Projekt-Filter (default: alle)
    */
-  async searchFacts(query, limit = 10) {
-    return this.callTool("search_memory_facts", {
+  async searchFacts(query, limit = 10, groupIds = null) {
+    const args = {
       query,
       max_facts: limit,
-    });
+    };
+    // Include all known groups if not specified
+    if (groupIds && groupIds.length > 0) {
+      args.group_ids = groupIds;
+    } else {
+      // Default: search all projects
+      args.group_ids = ["jet_projekt", "vectron"];
+    }
+    return this.callTool("search_memory_facts", args);
   }
 
   /**
    * Suche nach Nodes (Entities)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
+   * @param {string[]} groupIds - Projekt-Filter (default: alle)
    */
-  async searchNodes(query, limit = 10) {
-    return this.callTool("search_nodes", {
+  async searchNodes(query, limit = 10, groupIds = null) {
+    const args = {
       query,
       limit,
-    });
+    };
+    // Include all known groups if not specified
+    if (groupIds && groupIds.length > 0) {
+      args.group_ids = groupIds;
+    } else {
+      // Default: search all projects
+      args.group_ids = ["jet_projekt", "vectron"];
+    }
+    return this.callTool("search_nodes", args);
   }
 
   /**
    * Alle Episodes (importierte Dokumente/Chunks) abrufen
    * @param {number} lastN - Letzte N Episodes (default: 50)
+   * @param {string[]} groupIds - Projekt-Filter (default: alle)
    */
-  async getEpisodes(lastN = 50) {
-    return this.callTool("get_episodes", {
+  async getEpisodes(lastN = 50, groupIds = null) {
+    const args = {
       last_n: lastN,
-    });
+    };
+    if (groupIds && groupIds.length > 0) {
+      args.group_ids = groupIds;
+    } else {
+      args.group_ids = ["jet_projekt", "vectron"];
+    }
+    return this.callTool("get_episodes", args);
   }
 
   /**
