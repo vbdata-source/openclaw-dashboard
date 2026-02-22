@@ -15,6 +15,7 @@ export class GraphitiProxy {
     this.mcpEndpoint = `${baseUrl}/mcp`;
     this.sessionId = null;
     this.initPromise = null;
+    this.openaiApiKey = process.env.OPENAI_API_KEY || null;
   }
 
   /**
@@ -177,24 +178,82 @@ export class GraphitiProxy {
   }
 
   /**
-   * Erkennt Projekt aus der Suchanfrage
+   * LLM-basierte intelligente Projekt-Erkennung
+   * Analysiert den Kontext der Frage um das relevante Projekt zu bestimmen
    */
-  detectProjectFromQuery(query) {
+  async classifyQueryWithLLM(query) {
+    // Fallback wenn kein API Key
+    if (!this.openaiApiKey) {
+      console.log("[GraphitiProxy] No OpenAI key, using keyword fallback");
+      return this.detectProjectFromKeywords(query);
+    }
+
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `Du bist ein Klassifizierer für Suchanfragen. Analysiere die Frage und entscheide welches Projekt relevant ist.
+
+Projekte:
+- vectron: Vectron POS Kassensystem, Lua Scripts (vbdata-*, .vsc Dateien), OrderAndPay, Remoteservice, VectronPOS API
+- jet: JET Tankstellen-Projekt, GAP-Konzepte (GAP001-GAP999), JETZ-Tickets, Zapfsäulen, Fuel Pricing, POSLog, Kartengeräte
+
+Antworte NUR mit einem Wort: vectron, jet, oder both`
+            },
+            {
+              role: "user",
+              content: query
+            }
+          ],
+          max_tokens: 10,
+          temperature: 0,
+        }),
+      });
+
+      if (!response.ok) {
+        console.log(`[GraphitiProxy] OpenAI error: ${response.status}, using fallback`);
+        return this.detectProjectFromKeywords(query);
+      }
+
+      const data = await response.json();
+      const answer = data.choices?.[0]?.message?.content?.trim().toLowerCase();
+      
+      console.log(`[GraphitiProxy] LLM classified "${query.substring(0,40)}..." as: ${answer}`);
+
+      if (answer === "vectron") return ["vectron"];
+      if (answer === "jet") return ["jet_projekt"];
+      return ["jet_projekt", "vectron"];
+      
+    } catch (error) {
+      console.error("[GraphitiProxy] LLM classification error:", error.message);
+      return this.detectProjectFromKeywords(query);
+    }
+  }
+
+  /**
+   * Keyword-basierter Fallback (wenn LLM nicht verfügbar)
+   */
+  detectProjectFromKeywords(query) {
     const q = query.toLowerCase();
     
-    // Vectron-spezifische Keywords
     if (q.includes('vectron') || q.includes('vbdata-') || q.includes('.vsc') || 
         q.includes('orderandpay') || q.includes('remoteservice')) {
       return ["vectron"];
     }
     
-    // JET-spezifische Keywords
     if (q.includes('jet') || q.includes('gap0') || q.includes('jetz-') || 
         q.includes('zapfsäule') || q.includes('tankstelle') || q.includes('poslog')) {
       return ["jet_projekt"];
     }
     
-    // Default: beide durchsuchen
     return ["jet_projekt", "vectron"];
   }
 
@@ -202,18 +261,18 @@ export class GraphitiProxy {
    * Semantische Suche nach Facts (Beziehungen)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
-   * @param {string[]} groupIds - Projekt-Filter (default: auto-detect)
+   * @param {string[]} groupIds - Projekt-Filter (default: LLM auto-detect)
    */
   async searchFacts(query, limit = 10, groupIds = null) {
     const args = {
       query,
       max_facts: limit,
     };
-    // Auto-detect project from query if not specified
+    // LLM-based project detection if not specified
     if (groupIds && groupIds.length > 0) {
       args.group_ids = groupIds;
     } else {
-      args.group_ids = this.detectProjectFromQuery(query);
+      args.group_ids = await this.classifyQueryWithLLM(query);
     }
     console.log(`[GraphitiProxy] searchFacts: query="${query.substring(0,50)}", groups=${args.group_ids}`);
     return this.callTool("search_memory_facts", args);
@@ -223,18 +282,18 @@ export class GraphitiProxy {
    * Suche nach Nodes (Entities)
    * @param {string} query - Suchanfrage
    * @param {number} limit - Max Ergebnisse (default: 10)
-   * @param {string[]} groupIds - Projekt-Filter (default: auto-detect)
+   * @param {string[]} groupIds - Projekt-Filter (default: LLM auto-detect)
    */
   async searchNodes(query, limit = 10, groupIds = null) {
     const args = {
       query,
       limit,
     };
-    // Auto-detect project from query if not specified
+    // LLM-based project detection if not specified
     if (groupIds && groupIds.length > 0) {
       args.group_ids = groupIds;
     } else {
-      args.group_ids = this.detectProjectFromQuery(query);
+      args.group_ids = await this.classifyQueryWithLLM(query);
     }
     console.log(`[GraphitiProxy] searchNodes: query="${query.substring(0,50)}", groups=${args.group_ids}`);
     return this.callTool("search_nodes", args);
