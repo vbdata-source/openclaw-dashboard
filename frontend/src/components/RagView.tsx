@@ -89,6 +89,20 @@ export function RagView() {
     }
   }, []);
 
+  // Neue Abfrage - Alles zurücksetzen
+  const resetQuery = useCallback(() => {
+    setQuery("");
+    setAnswer(null);
+    setAiAnswer(null);
+    setFacts([]);
+    setNodes([]);
+    setAnswerSources([]);
+    setDocumentLinks([]);
+    setError(null);
+    setHasSearched(false);
+    setExactSearch(false);
+  }, []);
+
   // AI-Antwort generieren (via Job mit Polling)
   const generateAiAnswer = useCallback(async () => {
     if (!query.trim() || facts.length === 0) return;
@@ -420,6 +434,16 @@ export function RagView() {
             >
             {loading || answerLoading ? "⏳" : activeTab === "ask" ? "💬" : "🔍"}
             </button>
+            {/* Neue Abfrage Button */}
+            {(hasSearched || query.trim()) && (
+              <button 
+                onClick={resetQuery}
+                className="rag-reset-button"
+                title="Neue Abfrage starten"
+              >
+                🔄 Neu
+              </button>
+            )}
           </div>
           {activeTab === "ask" && (
             <div className="rag-search-options">
@@ -475,21 +499,26 @@ export function RagView() {
                             {doc.driveUrl ? (
                               <div className="source-actions">
                                 <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="source-link">
-                                  👁️ Ansehen
+                                  👁️ In Drive öffnen
                                 </a>
                                 <a href={doc.downloadUrl || doc.driveUrl} target="_blank" rel="noopener noreferrer" className="source-link download">
                                   ⬇️ Download
                                 </a>
                               </div>
                             ) : (
-                              <span className="source-no-link">(kein Link verfügbar)</span>
+                              <span className="source-no-link">(nicht in Google Drive gefunden)</span>
                             )}
                           </div>
                         ))
                       ) : (
-                        answerSources.map((src, idx) => (
-                          <span key={idx} className="source-tag">📄 {src}</span>
-                        ))
+                        <>
+                          {answerSources.map((src, idx) => (
+                            <span key={idx} className="source-tag">📄 {src}</span>
+                          ))}
+                          <div className="sources-hint">
+                            💡 Dokumente noch nicht mit Google Drive verknüpft
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
