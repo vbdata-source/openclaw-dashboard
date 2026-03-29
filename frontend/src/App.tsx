@@ -1784,17 +1784,18 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let stallAction: "watchdog" | "restart" | "alert" | "custom" = "watchdog";
     let stallCustomAction = "";
     
-    const stallMatch = rawText.match(/\[STALL-DETECTION: Bei (\d+) gleichen Ergebnissen: ([^\]]+)\]/);
+    // Match both old format "gleichen Ergebnissen" and new "keinem Fortschritt"
+    const stallMatch = rawText.match(/\[STALL-DETECTION: Bei (\d+)x? (?:gleichen Ergebnissen|keinem Fortschritt): ([^.]+)/);
     if (stallMatch) {
       detectStall = true;
       stallThreshold = parseInt(stallMatch[1]);
       const actionText = stallMatch[2];
-      if (actionText.includes("Watchdog")) stallAction = "watchdog";
-      else if (actionText.includes("Neustart")) stallAction = "restart";
-      else if (actionText.includes("Alarm")) stallAction = "alert";
+      if (actionText.includes("Watchdog") || actionText.includes("watchdog")) stallAction = "watchdog";
+      else if (actionText.includes("Neustart") || actionText.includes("neu starten")) stallAction = "restart";
+      else if (actionText.includes("Alarm") || actionText.includes("alarm")) stallAction = "alert";
       else {
         stallAction = "custom";
-        stallCustomAction = actionText;
+        stallCustomAction = actionText.trim();
       }
     }
     
