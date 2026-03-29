@@ -803,12 +803,18 @@ api.get("/scripts/:filename/usage", async (req, res) => {
     };
     
     // 1. Search in Cron Jobs (via Gateway)
+    let cronError = null;
     try {
       const cronRes = await gatewayFetch("/__openclaw__/cron");
       const jobs = cronRes?.jobs || [];
+      console.log(`[Usage] Searching ${jobs.length} cron jobs for ${scriptName}`);
       for (const job of jobs) {
         const text = job.payload?.text || job.payload?.message || "";
-        if (text.includes(`scripts/${scriptName}`) || text.includes(scriptName.replace(".js", ""))) {
+        // Debug: log what we're searching
+        const searchTerms = [`scripts/${scriptName}`, scriptName.replace(".js", "")];
+        const found = searchTerms.some(term => text.includes(term));
+        if (found) {
+          console.log(`[Usage] Found match in job: ${job.name}`);
           results.cronJobs.push({
             id: job.id,
             name: job.name || job.id.slice(0, 8),
@@ -820,6 +826,7 @@ api.get("/scripts/:filename/usage", async (req, res) => {
       }
     } catch (err) {
       console.error("[Usage] Cron search failed:", err.message);
+      cronError = err.message;
     }
     
     // 2. Search in other scripts
@@ -906,6 +913,7 @@ api.get("/scripts/:filename/usage", async (req, res) => {
     res.json({
       script: scriptName,
       totalUsages,
+      cronError: cronError || undefined,
       ...results
     });
   } catch (err) {

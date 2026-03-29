@@ -150,6 +150,7 @@ export interface ScriptInfo {
 export interface ScriptUsage {
   script: string;
   totalUsages: number;
+  cronError?: string;
   cronJobs: Array<{ id: string; name: string; enabled: boolean; schedule: any; match: string }>;
   scripts: Array<{ name: string; type: string }>;
   memory: Array<{ name: string; match: string }>;

@@ -800,7 +800,13 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                     </h4>
                     {usageData.cronJobs.length === 0 ? (
                       <div style={{ fontSize: "12px", color: "var(--txd)", padding: "8px", backgroundColor: "var(--bg2)", borderRadius: "6px" }}>
-                        Nicht in Cron Jobs verwendet
+                        {usageData.cronError ? (
+                          <span style={{ color: "#ef4444" }}>
+                            ⚠️ Cron-Suche fehlgeschlagen: {usageData.cronError}
+                          </span>
+                        ) : (
+                          "Nicht in Cron Jobs verwendet"
+                        )}
                       </div>
                     ) : (
                       usageData.cronJobs.map((job, i) => (
