@@ -1875,7 +1875,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const handleShowRuns = async (jobId: string) => {
     try {
       const result = await request("cron.runs", { jobId });
-      setJobRuns(result?.runs || []);
+      // API returns { entries: [...] }
+      setJobRuns(result?.entries || result?.runs || []);
       setShowRunsFor(jobId);
     } catch (err: any) {
       console.error("[Cron] Runs laden fehlgeschlagen:", err.message);
@@ -2314,10 +2315,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                   </tr>
                 </thead>
                 <tbody>
-                  {jobRuns.map((run, idx) => (
+                  {jobRuns.slice().reverse().map((run, idx) => (
                     <tr key={idx} style={{ borderBottom: "1px solid var(--bg2)" }}>
                       <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
-                        {run.startedAt ? new Date(run.startedAt).toLocaleString("de-AT", { 
+                        {(run.ts || run.runAtMs) ? new Date(run.ts || run.runAtMs).toLocaleString("de-AT", { 
                           dateStyle: "short", 
                           timeStyle: "medium" 
                         }) : "—"}
@@ -2328,22 +2329,29 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                           borderRadius: "4px",
                           fontSize: "11px",
                           fontWeight: 600,
-                          background: run.status === "success" || run.status === "completed" 
+                          background: run.status === "ok" 
                             ? "rgba(34, 197, 94, 0.2)" 
-                            : run.status === "failed" || run.status === "error"
-                            ? "rgba(239, 68, 68, 0.2)"
-                            : "rgba(234, 179, 8, 0.2)",
-                          color: run.status === "success" || run.status === "completed"
-                            ? "#22c55e"
-                            : run.status === "failed" || run.status === "error"
-                            ? "#ef4444"
-                            : "#eab308"
+                            : "rgba(239, 68, 68, 0.2)",
+                          color: run.status === "ok" ? "#22c55e" : "#ef4444"
                         }}>
-                          {run.status || "unbekannt"}
+                          {run.status === "ok" ? "✓ OK" : run.status || "?"}
                         </span>
+                        {run.durationMs && (
+                          <span style={{ marginLeft: "8px", fontSize: "10px", color: "var(--txd)" }}>
+                            {(run.durationMs / 1000).toFixed(1)}s
+                          </span>
+                        )}
                       </td>
-                      <td style={{ padding: "8px", maxWidth: "400px", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {run.result || run.error || run.output || "—"}
+                      <td style={{ padding: "8px", maxWidth: "500px" }}>
+                        <div style={{ 
+                          whiteSpace: "pre-wrap", 
+                          wordBreak: "break-word",
+                          fontSize: "12px",
+                          maxHeight: "80px",
+                          overflow: "auto"
+                        }}>
+                          {run.summary || run.result || run.error || "—"}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2398,18 +2406,23 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 color: "var(--txd)"
               }}>
                 <span title="Letzte Ausführung">
-                  🕐 {job.lastRun 
-                    ? new Date(job.lastRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })
+                  🕐 {job.state?.lastRunAtMs 
+                    ? new Date(job.state.lastRunAtMs).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })
                     : "Noch nie"}
                 </span>
-                {job.nextRun && (
+                {job.state?.nextRunAtMs && (
                   <span title="Nächste Ausführung">
-                    ⏭️ {new Date(job.nextRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}
+                    ⏭️ {new Date(job.state.nextRunAtMs).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}
                   </span>
                 )}
-                {job.runCount !== undefined && (
-                  <span title="Anzahl Ausführungen">
-                    🔢 {job.runCount}x
+                {job.state?.lastStatus && (
+                  <span title="Letzter Status" style={{
+                    padding: "1px 6px",
+                    borderRadius: "3px",
+                    background: job.state.lastStatus === "ok" ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
+                    color: job.state.lastStatus === "ok" ? "#22c55e" : "#ef4444"
+                  }}>
+                    {job.state.lastStatus === "ok" ? "✓" : "✗"}
                   </span>
                 )}
               </div>
