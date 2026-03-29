@@ -1890,8 +1890,14 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
 
-    // Build message with auto-pause instruction if enabled
-    let messageText = form.text;
+    // Build message - first strip any existing tags to prevent duplication
+    let messageText = form.text
+      .replace(/\n\n\[AUTO-PAUSE:.*?\]/gs, "")
+      .replace(/\n\n\[STALL-DETECTION:.*?\]/gs, "")
+      .replace(/\n\n\[AUTO-CLEANUP:.*?\]/gs, "")
+      .trim();
+    
+    // Add auto-pause instruction if enabled
     if (form.autoPause && form.pausePattern) {
       messageText += `\n\n[AUTO-PAUSE: Überspringe Ausführung wenn: "${form.pausePattern}". Falls diese Bedingung zutrifft, führe NICHTS aus und antworte nur mit HEARTBEAT_OK.]`;
     }
