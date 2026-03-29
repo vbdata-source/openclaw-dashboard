@@ -140,6 +140,24 @@ export const agents = {
   list: () => request("/agents"),
 };
 
+// ── Scripts (Auto-Scripts) ────────────────────────────────
+export interface ScriptInfo {
+  name: string;
+  size: number;
+  description?: string;
+}
+
+export const scripts = {
+  list: () => request<{ scripts: ScriptInfo[] }>("/scripts"),
+  get: (filename: string) =>
+    request<{ filename: string; content: string }>(`/scripts/${encodeURIComponent(filename)}`),
+  update: (filename: string, content: string) =>
+    request(`/scripts/${encodeURIComponent(filename)}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+};
+
 // ── Cron Jobs ─────────────────────────────────────────────
 export const cron = {
   list: () => request("/cron"),
@@ -362,6 +380,7 @@ export const api = {
   authProfiles,
   memory,
   agents,
+  scripts,
   cron,
   events,
   approvals,

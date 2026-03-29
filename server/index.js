@@ -704,6 +704,89 @@ api.put("/memory/folder/:filename", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Auto-Scripts (scripts/*.js) ───────────────────────────
+api.get("/scripts", async (req, res) => {
+  try {
+    if (useLocalWorkspace) {
+      const scriptsDir = join(WORKSPACE_DIR, "scripts");
+      if (!existsSync(scriptsDir)) {
+        return res.json({ scripts: [] });
+      }
+      const scripts = readdirSync(scriptsDir)
+        .filter(f => f.endsWith(".js"))
+        .sort()
+        .map(name => {
+          const filePath = join(scriptsDir, name);
+          let size = 0;
+          let description = "";
+          try { 
+            const content = readFileSync(filePath, "utf-8");
+            size = content.length;
+            // Extract description from JSDoc header
+            const docMatch = content.match(/\/\*\*[\s\S]*?\*\//);
+            if (docMatch) {
+              description = docMatch[0]
+                .replace(/\/\*\*|\*\//g, "")
+                .replace(/^\s*\*\s?/gm, "")
+                .trim()
+                .split("\n")[0]; // First line only
+            }
+          } catch {}
+          return { name, size, description };
+        });
+      return res.json({ scripts });
+    }
+    res.json({ scripts: [], error: "Remote workspace not supported for scripts" });
+  } catch (err) {
+    res.status(502).json({ error: "Scripts nicht ladbar", detail: err.message });
+  }
+});
+
+api.get("/scripts/:filename", async (req, res) => {
+  try {
+    const filename = basename(decodeURIComponent(req.params.filename));
+    if (!filename.endsWith(".js")) {
+      return res.status(400).json({ error: "Nur .js Dateien erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const filePath = join(WORKSPACE_DIR, "scripts", filename);
+      if (!existsSync(filePath)) {
+        return res.status(404).json({ error: "Script nicht gefunden" });
+      }
+      const content = readFileSync(filePath, "utf-8");
+      return res.json({ filename, content });
+    }
+    
+    res.status(502).json({ error: "Remote workspace not supported for scripts" });
+  } catch (err) {
+    res.status(502).json({ error: "Script nicht lesbar", detail: err.message });
+  }
+});
+
+api.put("/scripts/:filename", sensitiveLimiter, async (req, res) => {
+  try {
+    const filename = basename(decodeURIComponent(req.params.filename));
+    if (!filename.endsWith(".js")) {
+      return res.status(400).json({ error: "Nur .js Dateien erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const scriptsDir = join(WORKSPACE_DIR, "scripts");
+      if (!existsSync(scriptsDir)) {
+        mkdirSync(scriptsDir, { recursive: true });
+      }
+      const filePath = join(scriptsDir, filename);
+      writeFileSync(filePath, req.body.content || "", "utf-8");
+      return res.json({ ok: true });
+    }
+    
+    res.status(502).json({ error: "Remote workspace not supported for scripts" });
+  } catch (err) {
+    res.status(502).json({ error: "Script nicht schreibbar", detail: err.message });
+  }
+});
+
 // ── Agent / Jobs ──────────────────────────────────────────
 api.get("/agents", async (req, res) => {
   try {

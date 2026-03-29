@@ -30,6 +30,7 @@ import { SessionsView } from "./components/SessionsView";
 import { SettingsView } from "./components/settings";
 import { TemplatesView } from "./components/TemplatesView";
 import { RagView } from "./components/RagView";
+import { ScriptsView } from "./components/ScriptsView";
 
 // ── Types ─────────────────────────────────────────────────
 export type JobStatus = "backlog" | "queued" | "running" | "pending" | "done" | "failed" | "archived";
@@ -1589,7 +1590,7 @@ export interface CronJob {
 }
 
 // ── Cron Manager Component ────────────────────────────────
-function CronManager({ request, loading }: { request: (method: string, params?: any) => Promise<any>; loading?: boolean }) {
+function CronManager({ request, loading, onOpenScript }: { request: (method: string, params?: any) => Promise<any>; loading?: boolean; onOpenScript?: (scriptName: string) => void }) {
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [cronLoading, setCronLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -2844,8 +2845,28 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                         borderRadius: "6px",
                         marginTop: idx > 0 ? "8px" : 0
                       }}>
-                        <div style={{ fontWeight: 500, fontSize: "13px", color: "#8b5cf6" }}>
-                          {doc?.title || `📄 ${script}`}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontWeight: 500, fontSize: "13px", color: "#8b5cf6" }}>
+                            {doc?.title || `📄 ${script}`}
+                          </div>
+                          {onOpenScript && (
+                            <button
+                              onClick={() => { setShowInfoFor(null); onOpenScript(script); }}
+                              style={{
+                                padding: "4px 8px",
+                                backgroundColor: "rgba(139, 92, 246, 0.2)",
+                                border: "1px solid rgba(139, 92, 246, 0.4)",
+                                borderRadius: "4px",
+                                color: "#8b5cf6",
+                                cursor: "pointer",
+                                fontSize: "11px",
+                                fontWeight: 500
+                              }}
+                              title="Script im Editor öffnen"
+                            >
+                              📝 Öffnen
+                            </button>
+                          )}
                         </div>
                         <code style={{ fontSize: "11px", color: "var(--txd)" }}>scripts/{script}</code>
                         {doc && (
@@ -3040,11 +3061,12 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
 }
 
 // ── Main App ──────────────────────────────────────────────
-type View = "kanban" | "templates" | "memory" | "sessions" | "chat" | "settings" | "cron" | "rag";
+type View = "kanban" | "templates" | "memory" | "sessions" | "chat" | "settings" | "cron" | "rag" | "scripts";
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("chat");
+  const [highlightScript, setHighlightScript] = useState<string | null>(null);
 
   // Echte Daten (leer initialisiert, Jobs von API laden)
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -3385,6 +3407,7 @@ export default function App() {
     { key: "kanban", label: "Jobs", icon: "▦", badge: running || undefined },
     { key: "templates", label: "Vorlagen", icon: "📋" },
     { key: "cron", label: "Cron", icon: "🔄" },
+    { key: "scripts", label: "Scripts", icon: "📜" },
     { key: "memory", label: "Memory", icon: "◉" },
     { key: "rag", label: "Knowledge", icon: "🧠" },
     { key: "settings", label: "Settings", icon: "⚙️" },
@@ -3419,7 +3442,8 @@ export default function App() {
         {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
         {view === "templates" && <TemplatesView onJobCreated={() => { api.jobs.list().then((res) => setJobs(res.jobs || [])); setView("kanban"); }} gwRequest={gwRequest} />}
-        {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} />}
+        {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} onOpenScript={(name: string) => { setHighlightScript(name); setView("scripts"); }} />}
+        {view === "scripts" && <ScriptsView loading={dataLoading} highlightScript={highlightScript} onScriptChange={() => setHighlightScript(null)} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "rag" && <RagView />}
