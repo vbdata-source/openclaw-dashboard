@@ -1639,6 +1639,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     deleteCondition: "agent" as "agent" | "contains" | "regex" | "maxRuns",
     deletePattern: "",
     maxRuns: 10,
+    // Auto-Pause Rules
+    autoPause: false,
+    pauseCondition: "agent" as "agent" | "time",
+    pausePattern: "",
   });
 
   // Form für neuen Job öffnen
@@ -1665,6 +1669,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       deleteCondition: "contains",
       deletePattern: "",
       maxRuns: 10,
+      autoPause: false,
+      pauseCondition: "agent",
+      pausePattern: "",
     });
     setShowForm(true);
   };
@@ -1750,8 +1757,21 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       maxRuns = parseInt(maxRunsMatch[1]);
     }
     
-    // Strip AUTO-CLEANUP suffix from text for editing
+    // Parse AUTO-PAUSE
+    let autoPause = false;
+    let pauseCondition: "agent" | "time" = "agent";
+    let pausePattern = "";
+    
+    const pauseMatch = rawText.match(/\[AUTO-PAUSE: Überspringe Ausführung wenn: "([^"]*)"\./);
+    if (pauseMatch) {
+      autoPause = true;
+      pauseCondition = "agent";
+      pausePattern = pauseMatch[1];
+    }
+    
+    // Strip AUTO-CLEANUP and AUTO-PAUSE suffix from text for editing
     rawText = rawText.replace(/\n\n\[AUTO-CLEANUP:.*?\]/gs, "").trim();
+    rawText = rawText.replace(/\n\n\[AUTO-PAUSE:.*?\]/gs, "").trim();
     
     setForm({
       name: job.name || "",
@@ -1775,6 +1795,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       deleteCondition,
       deletePattern,
       maxRuns,
+      // Auto-Pause Rules
+      autoPause,
+      pauseCondition,
+      pausePattern,
     });
     setShowForm(true);
   };
@@ -1825,8 +1849,13 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
 
-    // Build message with auto-cleanup instruction if enabled
+    // Build message with auto-pause instruction if enabled
     let messageText = form.text;
+    if (form.autoPause && form.pausePattern) {
+      messageText += `\n\n[AUTO-PAUSE: Überspringe Ausführung wenn: "${form.pausePattern}". Falls diese Bedingung zutrifft, führe NICHTS aus und antworte nur mit HEARTBEAT_OK.]`;
+    }
+    
+    // Build message with auto-cleanup instruction if enabled
     if (form.autoDelete) {
       if (form.deleteCondition === "agent" && form.deletePattern) {
         messageText += `\n\n[AUTO-CLEANUP: Prüfe nach jeder Ausführung: "${form.deletePattern}". Falls diese Bedingung erfüllt ist, deaktiviere diesen Cron-Job mit: cron action=update id=<job-id> patch={enabled:false}]`;
@@ -2342,6 +2371,33 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             )}
           </div>
 
+          {/* Auto-Pause Option */}
+          <div className="oc-add-row" style={{ padding: '12px', backgroundColor: 'rgba(234, 179, 8, 0.1)', borderRadius: '8px', flexDirection: 'column', alignItems: 'flex-start', marginTop: '8px' }}>
+            <label className="oc-checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={form.autoPause} 
+                onChange={(e) => setForm({ ...form, autoPause: e.target.checked })}
+              />
+              ⏰ Ausführung überspringen wenn:
+            </label>
+            {form.autoPause && (
+              <div style={{ marginTop: '8px', width: '100%' }}>
+                <input
+                  className="oc-input"
+                  type="text"
+                  value={form.pausePattern}
+                  onChange={(e) => setForm({ ...form, pausePattern: e.target.value })}
+                  placeholder="z.B. 'Außerhalb 09:00-18:00 Uhr' oder 'Am Wochenende' oder 'Nachts'"
+                  style={{ width: '100%' }}
+                />
+                <div style={{ fontSize: '11px', color: 'var(--txd)', marginTop: '4px' }}>
+                  💡 Der Agent prüft diese Bedingung VOR jeder Ausführung. Bei Zutreffen wird übersprungen (temporär).
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* === AUFGABE === */}
           <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
             <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>📝 Aufgabe</span>
@@ -2354,25 +2410,41 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             rows={3}
           />
 
-          {/* Auto-Cleanup Info-Hinweis (nur wenn aktiv) */}
-          {form.autoDelete && (
-            <div style={{ 
-              padding: "10px 12px", 
-              backgroundColor: "rgba(234, 179, 8, 0.15)", 
-              borderRadius: "6px", 
-              fontSize: "12px",
-              color: "var(--tx)",
-              border: "1px solid rgba(234, 179, 8, 0.3)"
-            }}>
-              <strong>ℹ️ Auto-Deaktivierung aktiv:</strong>{" "}
-              {form.deleteCondition === "agent"
-                ? `Agent prüft: "${form.deletePattern || "..."}"`
-                : form.deleteCondition === "contains" 
-                ? `Wenn Ausgabe "${form.deletePattern || "..."}" enthält`
-                : form.deleteCondition === "regex"
-                ? `Wenn Ausgabe /${form.deletePattern || "..."}/ matcht`
-                : `Nach ${form.maxRuns} Ausführungen`
-              }
+          {/* Info-Hinweise für Auto-Pause und Auto-Cleanup */}
+          {(form.autoPause || form.autoDelete) && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {form.autoPause && form.pausePattern && (
+                <div style={{ 
+                  padding: "10px 12px", 
+                  backgroundColor: "rgba(234, 179, 8, 0.15)", 
+                  borderRadius: "6px", 
+                  fontSize: "12px",
+                  color: "var(--tx)",
+                  border: "1px solid rgba(234, 179, 8, 0.3)"
+                }}>
+                  <strong>⏰ Auto-Pause aktiv:</strong> Überspringe wenn: "{form.pausePattern}"
+                </div>
+              )}
+              {form.autoDelete && (
+                <div style={{ 
+                  padding: "10px 12px", 
+                  backgroundColor: "rgba(239, 68, 68, 0.15)", 
+                  borderRadius: "6px", 
+                  fontSize: "12px",
+                  color: "var(--tx)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)"
+                }}>
+                  <strong>🛑 Auto-Deaktivierung aktiv:</strong>{" "}
+                  {form.deleteCondition === "agent"
+                    ? `Agent prüft: "${form.deletePattern || "..."}"`
+                    : form.deleteCondition === "contains" 
+                    ? `Wenn Ausgabe "${form.deletePattern || "..."}" enthält`
+                    : form.deleteCondition === "regex"
+                    ? `Wenn Ausgabe /${form.deletePattern || "..."}/ matcht`
+                    : `Nach ${form.maxRuns} Ausführungen`
+                  }
+                </div>
+              )}
             </div>
           )}
 
