@@ -1947,6 +1947,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       {showForm && (
         <div className="oc-add-panel oc-cron-form">
           <h3 className="oc-form-title">{editingJob ? "✏️ Cron-Job bearbeiten" : "➕ Neuer Cron-Job"}</h3>
+          {/* Name-Zeile */}
           <div className="oc-add-row">
             <input 
               className="oc-input" 
@@ -1955,128 +1956,80 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               onChange={(e) => setForm({ ...form, name: e.target.value })} 
               style={{ flex: 1 }}
             />
+          </div>
+
+          {/* Schedule-Zeile: Dropdown + Einstellungen zusammen */}
+          <div className="oc-add-row" style={{ gap: "8px", alignItems: "center" }}>
             <select 
               className="oc-input oc-select" 
               value={form.scheduleKind} 
               onChange={(e) => setForm({ ...form, scheduleKind: e.target.value as any })}
-              style={{ width: 140 }}
+              style={{ width: "150px" }}
             >
               <option value="every">🔄 Intervall</option>
               <option value="daily">☀️ Täglich</option>
               <option value="weekly">📆 Wöchentlich</option>
               <option value="at">📅 Einmalig</option>
-              <option value="cron">⚙️ Cron (Experte)</option>
+              <option value="cron">⚙️ Cron</option>
             </select>
-          </div>
 
-          {form.scheduleKind === "cron" && (
-            <div className="oc-add-row">
-              <input 
-                className="oc-input" 
-                placeholder="Cron Expression (z.B. 0 9 * * 1)" 
-                value={form.cronExpr} 
-                onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
-                style={{ flex: 1 }}
-              />
-              <select 
-                className="oc-input oc-select" 
-                value="" 
-                onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
-                style={{ width: 160 }}
-              >
-                <option value="">Preset...</option>
-                {CRON_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-            </div>
-          )}
+            {/* Intervall-Einstellungen inline */}
+            {form.scheduleKind === "every" && (
+              <>
+                <input 
+                  type="number" 
+                  className="oc-input" 
+                  value={form.intervalValue} 
+                  onChange={(e) => setForm({ ...form, intervalValue: Math.max(1, parseInt(e.target.value) || 1) })}
+                  min={1}
+                  style={{ width: "70px", textAlign: "center" }}
+                />
+                <select 
+                  className="oc-input oc-select" 
+                  value={form.intervalUnit} 
+                  onChange={(e) => setForm({ ...form, intervalUnit: e.target.value as any })}
+                  style={{ width: "110px" }}
+                >
+                  <option value="seconds">Sekunden</option>
+                  <option value="minutes">Minuten</option>
+                  <option value="hours">Stunden</option>
+                  <option value="days">Tage</option>
+                </select>
+              </>
+            )}
 
-          {form.scheduleKind === "every" && (
-            <div className="oc-add-row" style={{ gap: "8px" }}>
-              <span style={{ color: "var(--txd)" }}>Alle</span>
-              <input 
-                type="number" 
-                className="oc-input" 
-                value={form.intervalValue} 
-                onChange={(e) => setForm({ ...form, intervalValue: Math.max(1, parseInt(e.target.value) || 1) })}
-                min={1}
-                style={{ width: "80px", textAlign: "center" }}
-              />
-              <select 
-                className="oc-input oc-select" 
-                value={form.intervalUnit} 
-                onChange={(e) => setForm({ ...form, intervalUnit: e.target.value as any })}
-                style={{ width: "120px" }}
-              >
-                <option value="seconds">Sekunden</option>
-                <option value="minutes">Minuten</option>
-                <option value="hours">Stunden</option>
-                <option value="days">Tage</option>
-              </select>
-            </div>
-          )}
+            {/* Täglich-Einstellungen inline */}
+            {form.scheduleKind === "daily" && (
+              <>
+                <span style={{ color: "var(--txd)" }}>um</span>
+                <input 
+                  type="time" 
+                  className="oc-input" 
+                  value={form.dailyTime} 
+                  onChange={(e) => setForm({ ...form, dailyTime: e.target.value })}
+                  style={{ width: "110px" }}
+                />
+                <span style={{ color: "var(--txd)" }}>Uhr</span>
+              </>
+            )}
 
-          {form.scheduleKind === "daily" && (
-            <div className="oc-add-row" style={{ gap: "8px" }}>
-              <span style={{ color: "var(--txd)" }}>Täglich um</span>
-              <input 
-                type="time" 
-                className="oc-input" 
-                value={form.dailyTime} 
-                onChange={(e) => setForm({ ...form, dailyTime: e.target.value })}
-                style={{ width: "120px" }}
-              />
-              <span style={{ color: "var(--txd)" }}>Uhr</span>
-            </div>
-          )}
-
-          {form.scheduleKind === "weekly" && (
-            <>
-              <div className="oc-add-row" style={{ gap: "8px" }}>
-                <span style={{ color: "var(--txd)" }}>Wöchentlich um</span>
+            {/* Wöchentlich-Zeit inline */}
+            {form.scheduleKind === "weekly" && (
+              <>
+                <span style={{ color: "var(--txd)" }}>um</span>
                 <input 
                   type="time" 
                   className="oc-input" 
                   value={form.weeklyTime} 
                   onChange={(e) => setForm({ ...form, weeklyTime: e.target.value })}
-                  style={{ width: "120px" }}
+                  style={{ width: "110px" }}
                 />
                 <span style={{ color: "var(--txd)" }}>Uhr</span>
-              </div>
-              <div className="oc-add-row" style={{ gap: "4px", flexWrap: "wrap" }}>
-                {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map((day, idx) => (
-                  <label 
-                    key={idx} 
-                    style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: "4px",
-                      padding: "4px 8px",
-                      background: form.weeklyDays.includes(idx) ? "var(--accent)" : "var(--bg2)",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      color: form.weeklyDays.includes(idx) ? "#fff" : "var(--tx)"
-                    }}
-                  >
-                    <input 
-                      type="checkbox" 
-                      checked={form.weeklyDays.includes(idx)}
-                      onChange={(e) => {
-                        const newDays = e.target.checked 
-                          ? [...form.weeklyDays, idx]
-                          : form.weeklyDays.filter(d => d !== idx);
-                        setForm({ ...form, weeklyDays: newDays.length > 0 ? newDays : [1] });
-                      }}
-                      style={{ display: "none" }}
-                    />
-                    {day}
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
+              </>
+            )}
 
-          {form.scheduleKind === "at" && (
-            <div className="oc-add-row">
+            {/* Einmalig-Datetime inline */}
+            {form.scheduleKind === "at" && (
               <input 
                 type="datetime-local" 
                 className="oc-input" 
@@ -2084,6 +2037,63 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 onChange={(e) => setForm({ ...form, atDateTime: e.target.value })}
                 style={{ flex: 1 }}
               />
+            )}
+
+            {/* Cron-Expression inline */}
+            {form.scheduleKind === "cron" && (
+              <>
+                <input 
+                  className="oc-input" 
+                  placeholder="z.B. 0 9 * * 1" 
+                  value={form.cronExpr} 
+                  onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+                <select 
+                  className="oc-input oc-select" 
+                  value="" 
+                  onChange={(e) => setForm({ ...form, cronExpr: e.target.value })}
+                  style={{ width: "140px" }}
+                >
+                  <option value="">Preset...</option>
+                  {CRON_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </>
+            )}
+          </div>
+
+          {/* Wöchentlich: Tage-Auswahl in eigener Zeile */}
+          {form.scheduleKind === "weekly" && (
+            <div className="oc-add-row" style={{ gap: "6px", flexWrap: "wrap" }}>
+              {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map((day, idx) => (
+                <label 
+                  key={idx} 
+                  style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    padding: "6px 12px",
+                    background: form.weeklyDays.includes(idx) ? "var(--accent)" : "var(--bg2)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    color: form.weeklyDays.includes(idx) ? "#fff" : "var(--tx)",
+                    fontWeight: form.weeklyDays.includes(idx) ? 600 : 400,
+                    transition: "all 0.15s"
+                  }}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={form.weeklyDays.includes(idx)}
+                    onChange={(e) => {
+                      const newDays = e.target.checked 
+                        ? [...form.weeklyDays, idx]
+                        : form.weeklyDays.filter(d => d !== idx);
+                      setForm({ ...form, weeklyDays: newDays.length > 0 ? newDays : [1] });
+                    }}
+                    style={{ display: "none" }}
+                  />
+                  {day}
+                </label>
+              ))}
             </div>
           )}
 
