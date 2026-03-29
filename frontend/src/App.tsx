@@ -1643,6 +1643,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     autoPause: false,
     pauseCondition: "agent" as "agent" | "time",
     pausePattern: "",
+    // Stall Detection
+    detectStall: false,
+    stallThreshold: 3,
+    stallAction: "watchdog" as "watchdog" | "restart" | "alert" | "custom",
+    stallCustomAction: "",
   });
 
   // Form für neuen Job öffnen
@@ -1672,6 +1677,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       autoPause: false,
       pauseCondition: "agent",
       pausePattern: "",
+      detectStall: false,
+      stallThreshold: 3,
+      stallAction: "watchdog",
+      stallCustomAction: "",
     });
     setShowForm(true);
   };
@@ -1769,9 +1778,30 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       pausePattern = pauseMatch[1];
     }
     
-    // Strip AUTO-CLEANUP and AUTO-PAUSE suffix from text for editing
+    // Parse STALL-DETECTION
+    let detectStall = false;
+    let stallThreshold = 3;
+    let stallAction: "watchdog" | "restart" | "alert" | "custom" = "watchdog";
+    let stallCustomAction = "";
+    
+    const stallMatch = rawText.match(/\[STALL-DETECTION: Bei (\d+) gleichen Ergebnissen: ([^\]]+)\]/);
+    if (stallMatch) {
+      detectStall = true;
+      stallThreshold = parseInt(stallMatch[1]);
+      const actionText = stallMatch[2];
+      if (actionText.includes("Watchdog")) stallAction = "watchdog";
+      else if (actionText.includes("Neustart")) stallAction = "restart";
+      else if (actionText.includes("Alarm")) stallAction = "alert";
+      else {
+        stallAction = "custom";
+        stallCustomAction = actionText;
+      }
+    }
+    
+    // Strip AUTO-CLEANUP, AUTO-PAUSE and STALL-DETECTION suffix from text for editing
     rawText = rawText.replace(/\n\n\[AUTO-CLEANUP:.*?\]/gs, "").trim();
     rawText = rawText.replace(/\n\n\[AUTO-PAUSE:.*?\]/gs, "").trim();
+    rawText = rawText.replace(/\n\n\[STALL-DETECTION:.*?\]/gs, "").trim();
     
     setForm({
       name: job.name || "",
@@ -1799,6 +1829,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       autoPause,
       pauseCondition,
       pausePattern,
+      // Stall Detection
+      detectStall,
+      stallThreshold,
+      stallAction,
+      stallCustomAction,
     });
     setShowForm(true);
   };
@@ -1853,6 +1888,26 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let messageText = form.text;
     if (form.autoPause && form.pausePattern) {
       messageText += `\n\n[AUTO-PAUSE: Überspringe Ausführung wenn: "${form.pausePattern}". Falls diese Bedingung zutrifft, führe NICHTS aus und antworte nur mit HEARTBEAT_OK.]`;
+    }
+    
+    // Build message with stall-detection instruction if enabled
+    if (form.detectStall) {
+      let actionText = "";
+      switch (form.stallAction) {
+        case "watchdog":
+          actionText = "Führe Watchdog aus: node scripts/reindex-watchdog.js";
+          break;
+        case "restart":
+          actionText = "Starte den hängenden Prozess neu";
+          break;
+        case "alert":
+          actionText = "Sende Alarm an Juergen: 'ACHTUNG: Job hängt!'";
+          break;
+        case "custom":
+          actionText = form.stallCustomAction || "Melde Stillstand";
+          break;
+      }
+      messageText += `\n\n[STALL-DETECTION: Bei ${form.stallThreshold} gleichen Ergebnissen: ${actionText}. Prüfe mit cron.runs ob die letzten ${form.stallThreshold} Ausgaben identisch sind. Falls ja, führe die Aktion aus.]`;
     }
     
     // Build message with auto-cleanup instruction if enabled
@@ -2398,6 +2453,59 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             )}
           </div>
 
+          {/* Stall-Detection Option */}
+          <div className="oc-add-row" style={{ padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', flexDirection: 'column', alignItems: 'flex-start', marginTop: '8px' }}>
+            <label className="oc-checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={form.detectStall} 
+                onChange={(e) => setForm({ ...form, detectStall: e.target.checked })}
+              />
+              🔄 Stillstand erkennen (Self-Healing):
+            </label>
+            {form.detectStall && (
+              <div style={{ marginTop: '8px', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--txd)', fontSize: '13px' }}>Bei</span>
+                  <input
+                    className="oc-input"
+                    type="number"
+                    value={form.stallThreshold}
+                    onChange={(e) => setForm({ ...form, stallThreshold: Math.max(2, Number(e.target.value)) })}
+                    min={2}
+                    max={10}
+                    style={{ width: '60px', textAlign: 'center' }}
+                  />
+                  <span style={{ color: 'var(--txd)', fontSize: '13px' }}>gleichen Ergebnissen:</span>
+                </div>
+                <select 
+                  className="oc-input oc-select" 
+                  value={form.stallAction} 
+                  onChange={(e) => setForm({ ...form, stallAction: e.target.value as any })}
+                  style={{ width: '100%', marginBottom: '8px' }}
+                >
+                  <option value="watchdog">🔧 Watchdog ausführen (node scripts/reindex-watchdog.js)</option>
+                  <option value="restart">🔄 Prozess neu starten</option>
+                  <option value="alert">🚨 Alarm an Juergen senden</option>
+                  <option value="custom">✏️ Eigene Aktion...</option>
+                </select>
+                {form.stallAction === "custom" && (
+                  <input
+                    className="oc-input"
+                    type="text"
+                    value={form.stallCustomAction}
+                    onChange={(e) => setForm({ ...form, stallCustomAction: e.target.value })}
+                    placeholder="z.B. 'Führe cleanup.js aus' oder 'Starte Docker-Container neu'"
+                    style={{ width: '100%' }}
+                  />
+                )}
+                <div style={{ fontSize: '11px', color: 'var(--txd)', marginTop: '4px' }}>
+                  💡 Agent vergleicht letzte Ergebnisse via cron.runs - bei Stillstand greift er automatisch ein.
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* === AUFGABE === */}
           <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
             <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>📝 Aufgabe</span>
@@ -2410,8 +2518,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             rows={3}
           />
 
-          {/* Info-Hinweise für Auto-Pause und Auto-Cleanup */}
-          {(form.autoPause || form.autoDelete) && (
+          {/* Info-Hinweise für Auto-Pause, Stall-Detection und Auto-Cleanup */}
+          {(form.autoPause || form.detectStall || form.autoDelete) && (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {form.autoPause && form.pausePattern && (
                 <div style={{ 
@@ -2423,6 +2531,23 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                   border: "1px solid rgba(234, 179, 8, 0.3)"
                 }}>
                   <strong>⏰ Auto-Pause aktiv:</strong> Überspringe wenn: "{form.pausePattern}"
+                </div>
+              )}
+              {form.detectStall && (
+                <div style={{ 
+                  padding: "10px 12px", 
+                  backgroundColor: "rgba(59, 130, 246, 0.15)", 
+                  borderRadius: "6px", 
+                  fontSize: "12px",
+                  color: "var(--tx)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)"
+                }}>
+                  <strong>🔄 Stillstand-Erkennung aktiv:</strong> Bei {form.stallThreshold}x gleichem Ergebnis → {
+                    form.stallAction === "watchdog" ? "Watchdog ausführen" :
+                    form.stallAction === "restart" ? "Prozess neu starten" :
+                    form.stallAction === "alert" ? "Alarm senden" :
+                    form.stallCustomAction || "Eigene Aktion"
+                  }
                 </div>
               )}
               {form.autoDelete && (
