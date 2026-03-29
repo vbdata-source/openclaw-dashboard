@@ -1594,6 +1594,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const [cronLoading, setCronLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
+  const [showRunsFor, setShowRunsFor] = useState<string | null>(null);
+  const [jobRuns, setJobRuns] = useState<any[]>([]);
   
   // Helper: convert ms to value + unit
   const msToInterval = (ms: number): { value: number; unit: string } => {
@@ -1858,7 +1860,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     }
   };
 
-  // Job löschen
+  // Job löschen (nur intern, nicht im UI)
   const handleDelete = async (id: string) => {
     if (!confirm("Cron-Job wirklich löschen?")) return;
     try {
@@ -1866,6 +1868,19 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       loadCronJobs();
     } catch (err: any) {
       console.error("[Cron] Löschen fehlgeschlagen:", err.message);
+    }
+  };
+
+  // Run-History anzeigen
+  const handleShowRuns = async (jobId: string) => {
+    try {
+      const result = await request("cron.runs", { jobId });
+      setJobRuns(result?.runs || []);
+      setShowRunsFor(jobId);
+    } catch (err: any) {
+      console.error("[Cron] Runs laden fehlgeschlagen:", err.message);
+      setJobRuns([]);
+      setShowRunsFor(jobId);
     }
   };
 
@@ -2274,6 +2289,71 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         </div>
       )}
 
+      {/* Run-History Panel */}
+      {showRunsFor && (
+        <div className="oc-add-panel" style={{ marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h3 className="oc-form-title" style={{ margin: 0 }}>
+              📋 Ausführungs-Log: {cronJobs.find(j => j.id === showRunsFor)?.name || showRunsFor.slice(0, 8)}
+            </h3>
+            <button className="oc-btn-ghost" onClick={() => setShowRunsFor(null)}>✕ Schließen</button>
+          </div>
+          
+          {jobRuns.length === 0 ? (
+            <div style={{ color: "var(--txd)", padding: "20px", textAlign: "center" }}>
+              Keine Ausführungen gefunden
+            </div>
+          ) : (
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--bg3)", textAlign: "left" }}>
+                    <th style={{ padding: "8px", color: "var(--txd)" }}>Zeitpunkt</th>
+                    <th style={{ padding: "8px", color: "var(--txd)" }}>Status</th>
+                    <th style={{ padding: "8px", color: "var(--txd)" }}>Ergebnis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobRuns.map((run, idx) => (
+                    <tr key={idx} style={{ borderBottom: "1px solid var(--bg2)" }}>
+                      <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                        {run.startedAt ? new Date(run.startedAt).toLocaleString("de-AT", { 
+                          dateStyle: "short", 
+                          timeStyle: "medium" 
+                        }) : "—"}
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <span style={{ 
+                          padding: "2px 8px", 
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          background: run.status === "success" || run.status === "completed" 
+                            ? "rgba(34, 197, 94, 0.2)" 
+                            : run.status === "failed" || run.status === "error"
+                            ? "rgba(239, 68, 68, 0.2)"
+                            : "rgba(234, 179, 8, 0.2)",
+                          color: run.status === "success" || run.status === "completed"
+                            ? "#22c55e"
+                            : run.status === "failed" || run.status === "error"
+                            ? "#ef4444"
+                            : "#eab308"
+                        }}>
+                          {run.status || "unbekannt"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px", maxWidth: "400px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {run.result || run.error || run.output || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Job Liste */}
       <div className="oc-cron-list">
         {cronJobs.length === 0 && !cronLoading && (
@@ -2317,8 +2397,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               <button className="oc-cron-btn" onClick={() => handleRunNow(job.id)} title="Jetzt ausführen">
                 🚀
               </button>
-              <button className="oc-cron-btn oc-cron-btn--danger" onClick={() => handleDelete(job.id)} title="Löschen">
-                🗑️
+              <button className="oc-cron-btn" onClick={() => handleShowRuns(job.id)} title="Ausführungs-Log">
+                📋
               </button>
             </div>
           </div>
