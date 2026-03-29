@@ -1688,7 +1688,6 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   // Form für Edit öffnen
   const openEditForm = (job: CronJob) => {
     setEditingJob(job);
-    const autoCleanup = (job as any).autoCleanup;
     const interval = msToInterval(job.schedule.everyMs || 3600000);
     
     // Detect if cron expression is actually daily/weekly
@@ -1709,8 +1708,30 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       }
     }
     
-    // Strip AUTO-CLEANUP suffix from text when editing
+    // Parse AUTO-CLEANUP settings from prompt text (since Gateway doesn't store autoCleanup)
     let rawText = job.payload.text || job.payload.message || "";
+    let autoDelete = false;
+    let deleteCondition: "contains" | "maxRuns" = "contains";
+    let deletePattern = "";
+    let maxRuns = 10;
+    
+    // Match: [AUTO-CLEANUP: Falls die Ausgabe "PATTERN" enthält, ...]
+    const containsMatch = rawText.match(/\[AUTO-CLEANUP: Falls die Ausgabe "([^"]*)" enthält/);
+    if (containsMatch) {
+      autoDelete = true;
+      deleteCondition = "contains";
+      deletePattern = containsMatch[1];
+    }
+    
+    // Match: [AUTO-CLEANUP: Dieser Job soll nach X Ausführungen ...]
+    const maxRunsMatch = rawText.match(/\[AUTO-CLEANUP: Dieser Job soll nach (\d+) Ausführungen/);
+    if (maxRunsMatch) {
+      autoDelete = true;
+      deleteCondition = "maxRuns";
+      maxRuns = parseInt(maxRunsMatch[1]);
+    }
+    
+    // Strip AUTO-CLEANUP suffix from text for editing
     rawText = rawText.replace(/\n\n\[AUTO-CLEANUP:.*?\]/gs, "").trim();
     
     setForm({
@@ -1730,11 +1751,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       enabled: job.enabled,
       deliver: job.payload.deliver || false,
       deliverChannel: job.payload.channel || "telegram",
-      // Auto-Cleanup Rules
-      autoDelete: !!autoCleanup,
-      deleteCondition: autoCleanup?.condition || "contains",
-      deletePattern: autoCleanup?.pattern || "",
-      maxRuns: autoCleanup?.maxRuns || 10,
+      // Auto-Cleanup Rules (parsed from prompt text)
+      autoDelete,
+      deleteCondition,
+      deletePattern,
+      maxRuns,
     });
     setShowForm(true);
   };
