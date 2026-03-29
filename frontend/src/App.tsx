@@ -1641,6 +1641,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   // Form für Edit öffnen
   const openEditForm = (job: CronJob) => {
     setEditingJob(job);
+    const autoCleanup = (job as any).autoCleanup;
     setForm({
       name: job.name || "",
       scheduleKind: job.schedule.kind,
@@ -1654,6 +1655,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       enabled: job.enabled,
       deliver: job.payload.deliver || false,
       deliverChannel: job.payload.channel || "telegram",
+      // Auto-Cleanup Rules
+      autoDelete: !!autoCleanup,
+      deleteCondition: autoCleanup?.condition || "contains",
+      deletePattern: autoCleanup?.pattern || "",
+      maxRuns: autoCleanup?.maxRuns || 10,
     });
     setShowForm(true);
   };
