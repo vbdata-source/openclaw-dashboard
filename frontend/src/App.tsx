@@ -1635,7 +1635,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     deliverChannel: "telegram",
     // Auto-Cleanup Rules
     autoDelete: false,
-    deleteCondition: "contains" as "contains" | "maxRuns",
+    deleteCondition: "contains" as "contains" | "regex" | "maxRuns",
     deletePattern: "",
     maxRuns: 10,
   });
@@ -1713,11 +1713,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     // Parse AUTO-CLEANUP settings from prompt text (since Gateway doesn't store autoCleanup)
     let rawText = job.payload.text || job.payload.message || "";
     let autoDelete = false;
-    let deleteCondition: "contains" | "maxRuns" = "contains";
+    let deleteCondition: "contains" | "regex" | "maxRuns" = "contains";
     let deletePattern = "";
     let maxRuns = 10;
     
-    // Match: [AUTO-CLEANUP: Falls die Ausgabe "PATTERN" enthält, ...] (both old "lösche" and new "deaktiviere")
+    // Match: [AUTO-CLEANUP: Falls die Ausgabe "PATTERN" enthält, ...]
     const containsMatch = rawText.match(/\[AUTO-CLEANUP: Falls die Ausgabe "([^"]*)" enthält/);
     if (containsMatch) {
       autoDelete = true;
@@ -1725,7 +1725,15 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       deletePattern = containsMatch[1];
     }
     
-    // Match: [AUTO-CLEANUP: Dieser Job soll nach X Ausführungen ...] (both old "gelöscht" and new "deaktiviert")
+    // Match: [AUTO-CLEANUP: Falls die Ausgabe das Regex-Pattern /PATTERN/ matcht, ...]
+    const regexMatch = rawText.match(/\[AUTO-CLEANUP: Falls die Ausgabe das Regex-Pattern \/([^/]*)\/matcht/);
+    if (regexMatch) {
+      autoDelete = true;
+      deleteCondition = "regex";
+      deletePattern = regexMatch[1];
+    }
+    
+    // Match: [AUTO-CLEANUP: Dieser Job soll nach X Ausführungen ...]
     const maxRunsMatch = rawText.match(/\[AUTO-CLEANUP: Dieser Job soll nach (\d+) Ausführungen/);
     if (maxRunsMatch) {
       autoDelete = true;
@@ -1813,6 +1821,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     if (form.autoDelete) {
       if (form.deleteCondition === "contains" && form.deletePattern) {
         messageText += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${form.deletePattern}" enthält, deaktiviere diesen Cron-Job mit: cron action=update id=<job-id> patch={enabled:false}]`;
+      } else if (form.deleteCondition === "regex" && form.deletePattern) {
+        messageText += `\n\n[AUTO-CLEANUP: Falls die Ausgabe das Regex-Pattern /${form.deletePattern}/ matcht, deaktiviere diesen Cron-Job mit: cron action=update id=<job-id> patch={enabled:false}]`;
       } else if (form.deleteCondition === "maxRuns" && form.maxRuns) {
         messageText += `\n\n[AUTO-CLEANUP: Dieser Job soll nach ${form.maxRuns} Ausführungen deaktiviert werden.]`;
       }
@@ -2227,10 +2237,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 <select 
                   className="oc-input oc-select" 
                   value={form.deleteCondition} 
-                  onChange={(e) => setForm({ ...form, deleteCondition: e.target.value as "contains" | "maxRuns" })}
+                  onChange={(e) => setForm({ ...form, deleteCondition: e.target.value as "contains" | "regex" | "maxRuns" })}
                   style={{ width: '100%', marginBottom: '8px' }}
                 >
                   <option value="contains">Ausgabe enthält Text...</option>
+                  <option value="regex">Ausgabe matcht Regex...</option>
                   <option value="maxRuns">Nach X Ausführungen</option>
                 </select>
                 
@@ -2240,9 +2251,25 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                     type="text"
                     value={form.deletePattern}
                     onChange={(e) => setForm({ ...form, deletePattern: e.target.value })}
-                    placeholder="z.B. '100%' oder 'fertig' oder 'keine Änderung'"
+                    placeholder="z.B. '100%' oder 'fertig' oder '358/358'"
                     style={{ width: '100%' }}
                   />
+                )}
+                
+                {form.deleteCondition === "regex" && (
+                  <>
+                    <input
+                      className="oc-input"
+                      type="text"
+                      value={form.deletePattern}
+                      onChange={(e) => setForm({ ...form, deletePattern: e.target.value })}
+                      placeholder="z.B. 'JETZ: [3-9]\\d{2}/358' oder '(100%|358/358)'"
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--txd)', marginTop: '4px' }}>
+                      💡 Regex-Beispiele: <code>[3-9]\d{"{2}"}</code> = 300-999 | <code>(fertig|100%)</code> = eines von beiden
+                    </div>
+                  </>
                 )}
                 
                 {form.deleteCondition === "maxRuns" && (
@@ -2287,8 +2314,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             }}>
               <strong>ℹ️ Auto-Deaktivierung aktiv:</strong>{" "}
               {form.deleteCondition === "contains" 
-                ? `Wenn die Ausgabe "${form.deletePattern || "..."}" enthält, wird der Job automatisch deaktiviert.`
-                : `Nach ${form.maxRuns} Ausführungen wird der Job automatisch deaktiviert.`
+                ? `Wenn die Ausgabe "${form.deletePattern || "..."}" enthält, wird der Job deaktiviert.`
+                : form.deleteCondition === "regex"
+                ? `Wenn die Ausgabe das Pattern /${form.deletePattern || "..."}/ matcht, wird der Job deaktiviert.`
+                : `Nach ${form.maxRuns} Ausführungen wird der Job deaktiviert.`
               }
             </div>
           )}
