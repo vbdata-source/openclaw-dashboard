@@ -15,11 +15,12 @@ interface ScriptsViewProps {
   loading?: boolean;
   highlightScript?: string | null;
   onScriptChange?: () => void;
+  onAskAgent?: (question: string) => void;
 }
 
 type TabType = "scripts" | "config" | "data";
 
-export function ScriptsView({ loading: initialLoading, highlightScript, onScriptChange }: ScriptsViewProps) {
+export function ScriptsView({ loading: initialLoading, highlightScript, onScriptChange, onAskAgent }: ScriptsViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("scripts");
   const [scripts, setScripts] = useState<ScriptInfo[]>([]);
   const [explorerFiles, setExplorerFiles] = useState<ExplorerFile[]>([]);
@@ -564,15 +565,14 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   )}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  {activeTab === "scripts" && selectedFile && (
+                  {activeTab === "scripts" && selectedFile && onAskAgent && (
                     <button
                       className="oc-btn-ghost"
                       onClick={() => {
-                        const question = `Wo wird das Script "${selectedFile}" verwendet? Bitte prüfe: Cron-Jobs, andere Scripts die es importieren, und ob du es manuell aufrufst. Ist es noch in Verwendung oder kann es gelöscht werden?`;
-                        navigator.clipboard.writeText(question);
-                        alert(`📋 Frage kopiert!\n\nFüge sie im Chat ein um AJBot zu fragen:\n\n"${question.slice(0, 80)}..."`);
+                        const question = `Wo wird das Script "${selectedFile}" verwendet? Bitte prüfe: Cron-Jobs, andere Scripts die es importieren, und ob du es manuell aufrufst. Falls es nicht mehr verwendet wird, frag ob ich es archivieren soll (nach scripts/_archived/ verschieben, NICHT löschen).`;
+                        onAskAgent(question);
                       }}
-                      title="Frage in Zwischenablage kopieren und im Chat einfügen"
+                      title="Agent im Chat fragen"
                       style={{
                         backgroundColor: "rgba(59, 130, 246, 0.1)",
                         borderColor: "rgba(59, 130, 246, 0.3)"

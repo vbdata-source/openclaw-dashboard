@@ -1330,9 +1330,11 @@ interface ChatMessage {
   pending?: boolean;
 }
 
-function ChatView({ request, events }: { 
+function ChatView({ request, events, pendingMessage, onMessageSent }: { 
   request: (method: string, params: any) => Promise<any>;
   events: GatewayEvent[];
+  pendingMessage?: string | null;
+  onMessageSent?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1340,6 +1342,7 @@ function ChatView({ request, events }: {
   const [sessionKey, setSessionKey] = useState("agent:main:webchat:dashboard");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingHandled = useRef(false);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -1440,6 +1443,59 @@ function ChatView({ request, events }: {
       }
     }
   }, [events]);
+
+  // Handle pending message from other components (e.g., Scripts "Ask Agent")
+  useEffect(() => {
+    if (pendingMessage && !pendingHandled.current && !sending) {
+      pendingHandled.current = true;
+      
+      // Set input and trigger send
+      const sendPendingMessage = async () => {
+        const userMsg: ChatMessage = {
+          id: `msg-${Date.now()}`,
+          role: "user",
+          content: pendingMessage,
+          timestamp: Date.now(),
+        };
+
+        const assistantMsg: ChatMessage = {
+          id: `msg-${Date.now()}-response`,
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+          pending: true,
+        };
+
+        setMessages(prev => [...prev, userMsg, assistantMsg]);
+        setSending(true);
+
+        try {
+          await request("chat.send", {
+            sessionKey,
+            message: pendingMessage,
+            idempotencyKey: `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            deliver: false,
+          });
+        } catch (err: any) {
+          console.error("[Chat] Pending message error:", err);
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg?.pending) {
+              return [...prev.slice(0, -1), { ...lastMsg, content: `❌ Fehler: ${err.message}`, pending: false }];
+            }
+            return prev;
+          });
+          setSending(false);
+        }
+
+        // Clear pending message
+        onMessageSent?.();
+        pendingHandled.current = false;
+      };
+
+      sendPendingMessage();
+    }
+  }, [pendingMessage, sending, sessionKey, request, onMessageSent]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -3067,6 +3123,7 @@ export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("chat");
   const [highlightScript, setHighlightScript] = useState<string | null>(null);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
 
   // Echte Daten (leer initialisiert, Jobs von API laden)
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -3439,11 +3496,11 @@ export default function App() {
         ))}
       </nav>
       <main className="oc-main">
-        {view === "chat" && <ChatView request={gwRequest} events={wsEvents} />}
+        {view === "chat" && <ChatView request={gwRequest} events={wsEvents} pendingMessage={pendingChatMessage} onMessageSent={() => setPendingChatMessage(null)} />}
         {view === "kanban" && <KanbanBoard jobs={jobs} onMove={moveJob} onAdd={addJob} onDelete={delJob} onAddContext={addContextToJob} onUpdate={updateJob} loading={dataLoading} />}
         {view === "templates" && <TemplatesView onJobCreated={() => { api.jobs.list().then((res) => setJobs(res.jobs || [])); setView("kanban"); }} gwRequest={gwRequest} />}
         {view === "cron" && <CronManager request={gwRequest} loading={dataLoading} onOpenScript={(name: string) => { setHighlightScript(name); setView("scripts"); }} />}
-        {view === "scripts" && <ScriptsView loading={dataLoading} highlightScript={highlightScript} onScriptChange={() => setHighlightScript(null)} />}
+        {view === "scripts" && <ScriptsView loading={dataLoading} highlightScript={highlightScript} onScriptChange={() => setHighlightScript(null)} onAskAgent={(question) => { setPendingChatMessage(question); setView("chat"); }} />}
         {view === "memory" && <WorkspaceFilesEditor loading={dataLoading} />}
         {view === "sessions" && <SessionsView sessions={sessions} loading={dataLoading} onSelectSession={handleSelectSession} selectedSession={selectedSession} sessionPreview={sessionPreview} previewLoading={previewLoading} />}
         {view === "rag" && <RagView />}
