@@ -1717,7 +1717,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let deletePattern = "";
     let maxRuns = 10;
     
-    // Match: [AUTO-CLEANUP: Falls die Ausgabe "PATTERN" enthält, ...]
+    // Match: [AUTO-CLEANUP: Falls die Ausgabe "PATTERN" enthält, ...] (both old "lösche" and new "deaktiviere")
     const containsMatch = rawText.match(/\[AUTO-CLEANUP: Falls die Ausgabe "([^"]*)" enthält/);
     if (containsMatch) {
       autoDelete = true;
@@ -1725,7 +1725,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       deletePattern = containsMatch[1];
     }
     
-    // Match: [AUTO-CLEANUP: Dieser Job soll nach X Ausführungen ...]
+    // Match: [AUTO-CLEANUP: Dieser Job soll nach X Ausführungen ...] (both old "gelöscht" and new "deaktiviert")
     const maxRunsMatch = rawText.match(/\[AUTO-CLEANUP: Dieser Job soll nach (\d+) Ausführungen/);
     if (maxRunsMatch) {
       autoDelete = true;
@@ -1812,9 +1812,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let messageText = form.text;
     if (form.autoDelete) {
       if (form.deleteCondition === "contains" && form.deletePattern) {
-        messageText += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${form.deletePattern}" enthält, lösche diesen Cron-Job mit: cron action=remove jobId=<deine-job-id>]`;
+        messageText += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${form.deletePattern}" enthält, deaktiviere diesen Cron-Job mit: cron action=update id=<job-id> patch={enabled:false}]`;
       } else if (form.deleteCondition === "maxRuns" && form.maxRuns) {
-        messageText += `\n\n[AUTO-CLEANUP: Dieser Job soll nach ${form.maxRuns} Ausführungen gelöscht werden.]`;
+        messageText += `\n\n[AUTO-CLEANUP: Dieser Job soll nach ${form.maxRuns} Ausführungen deaktiviert werden.]`;
       }
     }
 
@@ -2207,7 +2207,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 checked={form.autoDelete} 
                 onChange={(e) => setForm({ ...form, autoDelete: e.target.checked })}
               />
-              ⚡ Automatisch löschen wenn:
+              ⏸️ Automatisch deaktivieren wenn:
             </label>
             {form.autoDelete && (
               <div style={{ marginTop: '8px', width: '100%' }}>
@@ -2272,10 +2272,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               color: "var(--tx)",
               border: "1px solid rgba(234, 179, 8, 0.3)"
             }}>
-              <strong>ℹ️ Auto-Cleanup aktiv:</strong>{" "}
+              <strong>ℹ️ Auto-Deaktivierung aktiv:</strong>{" "}
               {form.deleteCondition === "contains" 
-                ? `Wenn die Ausgabe "${form.deletePattern || "..."}" enthält, wird der Job automatisch gelöscht.`
-                : `Nach ${form.maxRuns} Ausführungen wird der Job automatisch gelöscht.`
+                ? `Wenn die Ausgabe "${form.deletePattern || "..."}" enthält, wird der Job automatisch deaktiviert.`
+                : `Nach ${form.maxRuns} Ausführungen wird der Job automatisch deaktiviert.`
               }
             </div>
           )}
@@ -2399,6 +2399,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               </button>
               <button className="oc-cron-btn" onClick={() => handleShowRuns(job.id)} title="Ausführungs-Log">
                 📋
+              </button>
+              <button className="oc-cron-btn oc-cron-btn--danger" onClick={() => handleDelete(job.id)} title="Löschen">
+                🗑️
               </button>
             </div>
           </div>
