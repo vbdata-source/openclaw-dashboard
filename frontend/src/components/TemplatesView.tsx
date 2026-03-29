@@ -112,6 +112,12 @@ function ScheduleDialog({
   const [deliver, setDeliver] = useState(true);
   const [deliverChannel, setDeliverChannel] = useState("telegram");
   const [customCron, setCustomCron] = useState(false);
+  
+  // Auto-Cleanup Rules
+  const [autoDelete, setAutoDelete] = useState(false);
+  const [deleteCondition, setDeleteCondition] = useState<"contains" | "maxRuns">("contains");
+  const [deletePattern, setDeletePattern] = useState("");
+  const [maxRuns, setMaxRuns] = useState(10);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +129,10 @@ function ScheduleDialog({
       timezone,
       deliver,
       deliverChannel,
+      autoDelete,
+      deleteCondition: autoDelete ? deleteCondition : undefined,
+      deletePattern: autoDelete && deleteCondition === "contains" ? deletePattern : undefined,
+      maxRuns: autoDelete && deleteCondition === "maxRuns" ? maxRuns : undefined,
     });
   };
 
@@ -256,6 +266,54 @@ function ScheduleDialog({
             )}
           </div>
 
+          {/* Auto-Cleanup Rules */}
+          <div className="oc-form-row" style={{ marginTop: 16, padding: 12, backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: 8 }}>
+            <label className="oc-checkbox-label">
+              <input
+                type="checkbox"
+                checked={autoDelete}
+                onChange={e => setAutoDelete(e.target.checked)}
+              />
+              ⚡ Automatisch löschen wenn:
+            </label>
+            {autoDelete && (
+              <div style={{ marginTop: 8 }}>
+                <select 
+                  value={deleteCondition} 
+                  onChange={e => setDeleteCondition(e.target.value as "contains" | "maxRuns")}
+                  style={{ marginBottom: 8, width: '100%' }}
+                >
+                  <option value="contains">Ausgabe enthält Text...</option>
+                  <option value="maxRuns">Nach X Ausführungen</option>
+                </select>
+                
+                {deleteCondition === "contains" && (
+                  <input
+                    type="text"
+                    value={deletePattern}
+                    onChange={e => setDeletePattern(e.target.value)}
+                    placeholder="z.B. '100%' oder 'fertig' oder 'keine Änderung'"
+                    style={{ width: '100%' }}
+                  />
+                )}
+                
+                {deleteCondition === "maxRuns" && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="number"
+                      value={maxRuns}
+                      onChange={e => setMaxRuns(Number(e.target.value))}
+                      min={1}
+                      max={1000}
+                      style={{ width: 80 }}
+                    />
+                    <span>Ausführungen</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="oc-form-actions">
             <button type="button" className="oc-btn" onClick={onCancel}>Abbrechen</button>
             <button type="submit" className="oc-btn oc-btn--primary">
@@ -276,6 +334,11 @@ interface ScheduleConfig {
   timezone: string;
   deliver: boolean;
   deliverChannel: string;
+  // Auto-Cleanup Rules
+  autoDelete?: boolean;
+  deleteCondition?: "contains" | "maxRuns";
+  deletePattern?: string;
+  maxRuns?: number;
 }
 
 // ── Template Editor Modal ─────────────────────────────────
@@ -489,13 +552,28 @@ export function TemplatesView({ onJobCreated, gwRequest }: TemplatesViewProps) {
         payload.channel = config.deliverChannel;
       }
 
-      const jobData = {
+      const jobData: any = {
         name: `${template.icon} ${template.name}`,
         schedule,
         payload,
         sessionTarget: "isolated",
         enabled: true,
       };
+      
+      // Auto-Cleanup Rules
+      if (config.autoDelete) {
+        jobData.autoCleanup = {
+          condition: config.deleteCondition,
+          pattern: config.deletePattern,
+          maxRuns: config.maxRuns,
+        };
+        // Also append instruction to the prompt for agent to self-delete
+        if (config.deleteCondition === "contains" && config.deletePattern) {
+          payload.message += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${config.deletePattern}" enthält, lösche diesen Cron-Job.]`;
+        } else if (config.deleteCondition === "maxRuns" && config.maxRuns) {
+          payload.message += `\n\n[AUTO-CLEANUP: Dieser Job wird nach ${config.maxRuns} Ausführungen automatisch gelöscht.]`;
+        }
+      }
 
       await gwRequest("cron.add", { job: jobData });
       setScheduling(null);
