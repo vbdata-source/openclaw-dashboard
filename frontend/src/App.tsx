@@ -1907,7 +1907,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
           actionText = form.stallCustomAction || "Melde Stillstand";
           break;
       }
-      messageText += `\n\n[STALL-DETECTION: Bei ${form.stallThreshold}x keinem Fortschritt: ${actionText}. Prüfe mit cron.runs die letzten ${form.stallThreshold} Ergebnisse. Vergleiche SEMANTISCH (nicht exakt): Ist der Kern-Inhalt gleich? Hat sich der Fortschritt/Status geändert? Ignoriere kleine Formulierungsunterschiede. Falls kein echter Fortschritt erkennbar → führe die Aktion aus.]`;
+      messageText += `\n\n[STALL-DETECTION: Bei ${form.stallThreshold}x keinem Fortschritt: ${actionText}. Prüfe mit cron.runs die letzten ${form.stallThreshold} Ergebnisse. Vergleiche SEMANTISCH: Hat sich der Fortschritt geändert? Falls kein Fortschritt → führe die Aktion aus und PROTOKOLLIERE: "🔧 SELF-HEALING: [Grund] → [Aktion] → [Ergebnis]". Falls die Aktion NICHT erfolgreich war, erstelle ein Dashboard-Todo mit POST an /internal/jobs: {"title":"Self-Healing fehlgeschlagen: [Job-Name]","description":"[Details]","priority":"high"}]`;
     }
     
     // Build message with auto-cleanup instruction if enabled
