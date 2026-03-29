@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import api, { ExplorerFile } from "../lib/api";
+import api, { ExplorerFile, ScriptUsage } from "../lib/api";
 
 interface ScriptInfo {
   name: string;
@@ -34,6 +34,9 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fileInfo, setFileInfo] = useState<{ size: number; modified: string } | null>(null);
+  const [showUsage, setShowUsage] = useState(false);
+  const [usageData, setUsageData] = useState<ScriptUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   // Scripts laden
   const loadScripts = useCallback(async () => {
@@ -178,6 +181,21 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
     if (!dirty || confirm("Änderungen wirklich verwerfen?")) {
       setEditContent(originalContent);
       setDirty(false);
+    }
+  };
+
+  // Script Usage laden
+  const loadUsage = async (scriptName: string) => {
+    setUsageLoading(true);
+    setShowUsage(true);
+    setUsageData(null);
+    try {
+      const data = await api.scripts.usage(scriptName);
+      setUsageData(data);
+    } catch (err: any) {
+      setError(err.message || "Fehler beim Laden der Verwendung");
+    } finally {
+      setUsageLoading(false);
     }
   };
 
@@ -546,6 +564,19 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   )}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
+                  {activeTab === "scripts" && selectedFile && (
+                    <button
+                      className="oc-btn-ghost"
+                      onClick={() => loadUsage(selectedFile)}
+                      title="Wo wird dieses Script verwendet?"
+                      style={{
+                        backgroundColor: "rgba(59, 130, 246, 0.1)",
+                        borderColor: "rgba(59, 130, 246, 0.3)"
+                      }}
+                    >
+                      🔍 Wo verwendet?
+                    </button>
+                  )}
                   {currentExtension === "json" && (
                     <button
                       className="oc-btn-ghost"
@@ -662,6 +693,284 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
           )}
         </div>
       </div>
+
+      {/* Usage Modal */}
+      {showUsage && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "20px"
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowUsage(false);
+          }}
+        >
+          <div style={{
+            backgroundColor: "var(--bg1)",
+            borderRadius: "12px",
+            maxWidth: "600px",
+            width: "100%",
+            maxHeight: "80vh",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "16px 20px",
+              backgroundColor: "var(--bg2)",
+              borderBottom: "1px solid var(--bg3)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "16px" }}>
+                  🔍 Verwendung von {usageData?.script || selectedFile}
+                </h3>
+                {usageData && (
+                  <span style={{ 
+                    fontSize: "12px", 
+                    color: usageData.totalUsages > 0 ? "#22c55e" : "#f59e0b",
+                    marginTop: "4px",
+                    display: "block"
+                  }}>
+                    {usageData.totalUsages > 0 
+                      ? `✓ ${usageData.totalUsages} Verwendung(en) gefunden`
+                      : "⚠️ Keine Verwendung gefunden - möglicherweise ungenutzt"}
+                  </span>
+                )}
+              </div>
+              <button 
+                onClick={() => setShowUsage(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  color: "var(--tx)"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ 
+              padding: "16px 20px", 
+              overflowY: "auto",
+              flex: 1
+            }}>
+              {usageLoading && (
+                <div style={{ textAlign: "center", padding: "40px", color: "var(--txd)" }}>
+                  ⏳ Suche nach Verwendungen...
+                </div>
+              )}
+
+              {usageData && !usageLoading && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {/* Cron Jobs */}
+                  <div>
+                    <h4 style={{ 
+                      margin: "0 0 8px 0", 
+                      fontSize: "13px", 
+                      color: "var(--txd)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}>
+                      🔄 Cron Jobs 
+                      <span style={{ 
+                        padding: "2px 6px", 
+                        backgroundColor: usageData.cronJobs.length > 0 ? "rgba(34,197,94,0.2)" : "var(--bg2)",
+                        borderRadius: "4px",
+                        fontSize: "11px"
+                      }}>
+                        {usageData.cronJobs.length}
+                      </span>
+                    </h4>
+                    {usageData.cronJobs.length === 0 ? (
+                      <div style={{ fontSize: "12px", color: "var(--txd)", padding: "8px", backgroundColor: "var(--bg2)", borderRadius: "6px" }}>
+                        Nicht in Cron Jobs verwendet
+                      </div>
+                    ) : (
+                      usageData.cronJobs.map((job, i) => (
+                        <div key={i} style={{
+                          padding: "10px 12px",
+                          backgroundColor: "var(--bg2)",
+                          borderRadius: "6px",
+                          marginTop: i > 0 ? "6px" : 0
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontWeight: 500, fontSize: "13px" }}>{job.name}</span>
+                            <span style={{
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                              backgroundColor: job.enabled ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
+                              color: job.enabled ? "#22c55e" : "#ef4444"
+                            }}>
+                              {job.enabled ? "Aktiv" : "Pausiert"}
+                            </span>
+                          </div>
+                          <code style={{ fontSize: "11px", color: "var(--txd)", display: "block", marginTop: "4px" }}>
+                            ...{job.match}...
+                          </code>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Other Scripts */}
+                  <div>
+                    <h4 style={{ 
+                      margin: "0 0 8px 0", 
+                      fontSize: "13px", 
+                      color: "var(--txd)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}>
+                      📜 Andere Scripts 
+                      <span style={{ 
+                        padding: "2px 6px", 
+                        backgroundColor: usageData.scripts.length > 0 ? "rgba(34,197,94,0.2)" : "var(--bg2)",
+                        borderRadius: "4px",
+                        fontSize: "11px"
+                      }}>
+                        {usageData.scripts.length}
+                      </span>
+                    </h4>
+                    {usageData.scripts.length === 0 ? (
+                      <div style={{ fontSize: "12px", color: "var(--txd)", padding: "8px", backgroundColor: "var(--bg2)", borderRadius: "6px" }}>
+                        Nicht von anderen Scripts importiert
+                      </div>
+                    ) : (
+                      usageData.scripts.map((script, i) => (
+                        <div key={i} style={{
+                          padding: "8px 12px",
+                          backgroundColor: "var(--bg2)",
+                          borderRadius: "6px",
+                          marginTop: i > 0 ? "4px" : 0,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                          <span style={{ fontSize: "13px" }}>📄 {script.name}</span>
+                          <span style={{ fontSize: "11px", color: "var(--txd)" }}>{script.type}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Memory/Docs */}
+                  <div>
+                    <h4 style={{ 
+                      margin: "0 0 8px 0", 
+                      fontSize: "13px", 
+                      color: "var(--txd)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}>
+                      📝 Dokumentation 
+                      <span style={{ 
+                        padding: "2px 6px", 
+                        backgroundColor: usageData.memory.length > 0 ? "rgba(34,197,94,0.2)" : "var(--bg2)",
+                        borderRadius: "4px",
+                        fontSize: "11px"
+                      }}>
+                        {usageData.memory.length}
+                      </span>
+                    </h4>
+                    {usageData.memory.length === 0 ? (
+                      <div style={{ fontSize: "12px", color: "var(--txd)", padding: "8px", backgroundColor: "var(--bg2)", borderRadius: "6px" }}>
+                        Nicht in Dokumentation erwähnt
+                      </div>
+                    ) : (
+                      usageData.memory.map((doc, i) => (
+                        <div key={i} style={{
+                          padding: "8px 12px",
+                          backgroundColor: "var(--bg2)",
+                          borderRadius: "6px",
+                          marginTop: i > 0 ? "4px" : 0
+                        }}>
+                          <span style={{ fontSize: "13px" }}>📄 {doc.name}</span>
+                          {doc.match && (
+                            <code style={{ fontSize: "10px", color: "var(--txd)", display: "block", marginTop: "2px" }}>
+                              ...{doc.match}...
+                            </code>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Config */}
+                  {usageData.config.length > 0 && (
+                    <div>
+                      <h4 style={{ 
+                        margin: "0 0 8px 0", 
+                        fontSize: "13px", 
+                        color: "var(--txd)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
+                      }}>
+                        ⚙️ Config-Dateien 
+                        <span style={{ 
+                          padding: "2px 6px", 
+                          backgroundColor: "rgba(34,197,94,0.2)",
+                          borderRadius: "4px",
+                          fontSize: "11px"
+                        }}>
+                          {usageData.config.length}
+                        </span>
+                      </h4>
+                      {usageData.config.map((cfg, i) => (
+                        <div key={i} style={{
+                          padding: "8px 12px",
+                          backgroundColor: "var(--bg2)",
+                          borderRadius: "6px",
+                          marginTop: i > 0 ? "4px" : 0
+                        }}>
+                          <span style={{ fontSize: "13px" }}>⚙️ {cfg.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {usageData.totalUsages === 0 && (
+                    <div style={{
+                      padding: "12px",
+                      backgroundColor: "rgba(245, 158, 11, 0.15)",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(245, 158, 11, 0.3)",
+                      fontSize: "13px"
+                    }}>
+                      <strong>⚠️ Möglicherweise ungenutzt:</strong>
+                      <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "var(--tx)" }}>
+                        Dieses Script wird weder in Cron-Jobs noch von anderen Scripts verwendet. 
+                        Es könnte ein Hilfsskript für manuelle Ausführung sein oder nicht mehr benötigt werden.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

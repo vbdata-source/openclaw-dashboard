@@ -787,6 +787,132 @@ api.put("/scripts/:filename", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Script Usage Search ───────────────────────────────────
+api.get("/scripts/:filename/usage", async (req, res) => {
+  try {
+    const scriptName = basename(decodeURIComponent(req.params.filename));
+    if (!scriptName.endsWith(".js")) {
+      return res.status(400).json({ error: "Nur .js Dateien" });
+    }
+    
+    const results = {
+      cronJobs: [],
+      scripts: [],
+      memory: [],
+      config: []
+    };
+    
+    // 1. Search in Cron Jobs (via Gateway)
+    try {
+      const cronRes = await gatewayFetch("/__openclaw__/cron");
+      const jobs = cronRes?.jobs || [];
+      for (const job of jobs) {
+        const text = job.payload?.text || job.payload?.message || "";
+        if (text.includes(`scripts/${scriptName}`) || text.includes(scriptName.replace(".js", ""))) {
+          results.cronJobs.push({
+            id: job.id,
+            name: job.name || job.id.slice(0, 8),
+            enabled: job.enabled,
+            schedule: job.schedule,
+            match: text.match(new RegExp(`.{0,30}${scriptName.replace(".", "\\.")}.{0,30}`))?.[0] || scriptName
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[Usage] Cron search failed:", err.message);
+    }
+    
+    // 2. Search in other scripts
+    if (useLocalWorkspace) {
+      const scriptsDir = join(WORKSPACE_DIR, "scripts");
+      if (existsSync(scriptsDir)) {
+        const files = readdirSync(scriptsDir).filter(f => f.endsWith(".js") && f !== scriptName);
+        for (const file of files) {
+          try {
+            const content = readFileSync(join(scriptsDir, file), "utf-8");
+            const scriptBase = scriptName.replace(".js", "");
+            // Check for require or import
+            if (content.includes(`require('./${scriptBase}')`) || 
+                content.includes(`require("./${scriptBase}")`) ||
+                content.includes(`require('./${scriptName}')`) ||
+                content.includes(`require("./${scriptName}")`) ||
+                content.includes(`from './${scriptBase}'`) ||
+                content.includes(`from "./${scriptBase}"`) ||
+                content.includes(`scripts/${scriptName}`)) {
+              results.scripts.push({
+                name: file,
+                type: "require/import"
+              });
+            }
+          } catch {}
+        }
+      }
+      
+      // 3. Search in memory files
+      const memoryDir = join(WORKSPACE_DIR, "memory");
+      if (existsSync(memoryDir)) {
+        const searchDirs = [memoryDir, join(memoryDir, "skills")];
+        for (const dir of searchDirs) {
+          if (!existsSync(dir)) continue;
+          const files = readdirSync(dir).filter(f => f.endsWith(".md"));
+          for (const file of files) {
+            try {
+              const content = readFileSync(join(dir, file), "utf-8");
+              if (content.includes(scriptName) || content.includes(scriptName.replace(".js", ""))) {
+                const relPath = dir === memoryDir ? file : `skills/${file}`;
+                results.memory.push({
+                  name: relPath,
+                  match: content.match(new RegExp(`.{0,40}${scriptName.replace(".", "\\.")}.{0,40}`))?.[0] || scriptName
+                });
+              }
+            } catch {}
+          }
+        }
+      }
+      
+      // Also search main workspace files
+      const mainFiles = ["TOOLS.md", "AGENTS.md", "MEMORY.md"];
+      for (const file of mainFiles) {
+        try {
+          const content = readFileSync(join(WORKSPACE_DIR, file), "utf-8");
+          if (content.includes(scriptName) || content.includes(scriptName.replace(".js", ""))) {
+            results.memory.push({
+              name: file,
+              match: content.match(new RegExp(`.{0,40}${scriptName.replace(".", "\\.")}.{0,40}`))?.[0] || scriptName
+            });
+          }
+        } catch {}
+      }
+      
+      // 4. Search in config files
+      const configDir = join(WORKSPACE_DIR, "config");
+      if (existsSync(configDir)) {
+        const files = readdirSync(configDir).filter(f => f.endsWith(".json") || f.endsWith(".yaml"));
+        for (const file of files) {
+          try {
+            const content = readFileSync(join(configDir, file), "utf-8");
+            if (content.includes(scriptName)) {
+              results.config.push({ name: file });
+            }
+          } catch {}
+        }
+      }
+    }
+    
+    // Calculate total
+    const totalUsages = results.cronJobs.length + results.scripts.length + 
+                        results.memory.length + results.config.length;
+    
+    res.json({
+      script: scriptName,
+      totalUsages,
+      ...results
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Suche fehlgeschlagen", detail: err.message });
+  }
+});
+
 // ── Workspace Explorer (config/, data/, etc.) ────────────
 const ALLOWED_EXPLORER_DIRS = ["config", "data", "scripts"];
 const ALLOWED_EXTENSIONS = [".json", ".yaml", ".yml", ".js", ".md", ".txt", ".csv"];

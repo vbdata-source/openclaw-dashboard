@@ -147,6 +147,15 @@ export interface ScriptInfo {
   description?: string;
 }
 
+export interface ScriptUsage {
+  script: string;
+  totalUsages: number;
+  cronJobs: Array<{ id: string; name: string; enabled: boolean; schedule: any; match: string }>;
+  scripts: Array<{ name: string; type: string }>;
+  memory: Array<{ name: string; match: string }>;
+  config: Array<{ name: string }>;
+}
+
 export const scripts = {
   list: () => request<{ scripts: ScriptInfo[] }>("/scripts"),
   get: (filename: string) =>
@@ -156,6 +165,8 @@ export const scripts = {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),
+  usage: (filename: string) =>
+    request<ScriptUsage>(`/scripts/${encodeURIComponent(filename)}/usage`),
 };
 
 // ── Explorer (config/, data/, scripts/) ───────────────────
