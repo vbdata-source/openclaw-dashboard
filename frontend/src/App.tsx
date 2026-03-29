@@ -1594,11 +1594,32 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const [cronLoading, setCronLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
+  
+  // Helper: convert ms to value + unit
+  const msToInterval = (ms: number): { value: number; unit: string } => {
+    if (ms % 86400000 === 0) return { value: ms / 86400000, unit: "days" };
+    if (ms % 3600000 === 0) return { value: ms / 3600000, unit: "hours" };
+    if (ms % 60000 === 0) return { value: ms / 60000, unit: "minutes" };
+    return { value: ms / 1000, unit: "seconds" };
+  };
+  
+  // Helper: convert value + unit to ms
+  const intervalToMs = (value: number, unit: string): number => {
+    switch (unit) {
+      case "seconds": return value * 1000;
+      case "minutes": return value * 60000;
+      case "hours": return value * 3600000;
+      case "days": return value * 86400000;
+      default: return value * 60000;
+    }
+  };
+  
   const [form, setForm] = useState({
     name: "",
     scheduleKind: "cron" as "at" | "every" | "cron",
     cronExpr: "0 9 * * 1", // Montag 9:00
-    everyMs: 3600000, // 1 Stunde
+    intervalValue: 1,
+    intervalUnit: "hours" as "seconds" | "minutes" | "hours" | "days",
     atDateTime: "",
     timezone: "Europe/Vienna",
     payloadKind: "systemEvent" as "systemEvent" | "agentTurn",
@@ -1621,7 +1642,8 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       name: "",
       scheduleKind: "cron",
       cronExpr: "0 9 * * 1",
-      everyMs: 3600000,
+      intervalValue: 1,
+      intervalUnit: "hours",
       atDateTime: "",
       timezone: "Europe/Vienna",
       payloadKind: "agentTurn",
@@ -1642,11 +1664,13 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const openEditForm = (job: CronJob) => {
     setEditingJob(job);
     const autoCleanup = (job as any).autoCleanup;
+    const interval = msToInterval(job.schedule.everyMs || 3600000);
     setForm({
       name: job.name || "",
       scheduleKind: job.schedule.kind,
       cronExpr: job.schedule.expr || "0 9 * * 1",
-      everyMs: job.schedule.everyMs || 3600000,
+      intervalValue: interval.value,
+      intervalUnit: interval.unit as any,
       atDateTime: job.schedule.atMs ? new Date(job.schedule.atMs).toISOString().slice(0, 16) : "",
       timezone: job.schedule.tz || "Europe/Vienna",
       payloadKind: job.payload.kind,
@@ -1696,7 +1720,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     if (form.scheduleKind === "cron") {
       schedule = { kind: "cron", expr: form.cronExpr, tz: form.timezone };
     } else if (form.scheduleKind === "every") {
-      schedule = { kind: "every", everyMs: form.everyMs };
+      schedule = { kind: "every", everyMs: intervalToMs(form.intervalValue, form.intervalUnit) };
     } else {
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
@@ -1894,20 +1918,26 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
           )}
 
           {form.scheduleKind === "every" && (
-            <div className="oc-add-row">
+            <div className="oc-add-row" style={{ gap: "8px" }}>
+              <span style={{ color: "var(--txd)" }}>Alle</span>
+              <input 
+                type="number" 
+                className="oc-input" 
+                value={form.intervalValue} 
+                onChange={(e) => setForm({ ...form, intervalValue: Math.max(1, parseInt(e.target.value) || 1) })}
+                min={1}
+                style={{ width: "80px", textAlign: "center" }}
+              />
               <select 
                 className="oc-input oc-select" 
-                value={form.everyMs} 
-                onChange={(e) => setForm({ ...form, everyMs: parseInt(e.target.value) })}
+                value={form.intervalUnit} 
+                onChange={(e) => setForm({ ...form, intervalUnit: e.target.value as any })}
+                style={{ width: "120px" }}
               >
-                <option value={300000}>Alle 5 Minuten</option>
-                <option value={900000}>Alle 15 Minuten</option>
-                <option value={1800000}>Alle 30 Minuten</option>
-                <option value={3600000}>Stündlich</option>
-                <option value={7200000}>Alle 2 Stunden</option>
-                <option value={14400000}>Alle 4 Stunden</option>
-                <option value={43200000}>Alle 12 Stunden</option>
-                <option value={86400000}>Täglich</option>
+                <option value="seconds">Sekunden</option>
+                <option value="minutes">Minuten</option>
+                <option value="hours">Stunden</option>
+                <option value="days">Tage</option>
               </select>
             </div>
           )}
