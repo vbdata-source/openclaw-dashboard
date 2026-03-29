@@ -1947,6 +1947,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       {showForm && (
         <div className="oc-add-panel oc-cron-form">
           <h3 className="oc-form-title">{editingJob ? "✏️ Cron-Job bearbeiten" : "➕ Neuer Cron-Job"}</h3>
+          
           {/* Name-Zeile */}
           <div className="oc-add-row">
             <input 
@@ -1958,7 +1959,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             />
           </div>
 
-          {/* Schedule-Zeile: Dropdown + Einstellungen zusammen */}
+          {/* === ZEITPLAN === */}
+          <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
+            <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>⏰ Zeitplan</span>
+          </div>
           <div className="oc-add-row" style={{ gap: "8px", alignItems: "center" }}>
             <select 
               className="oc-input oc-select" 
@@ -2097,6 +2101,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             </div>
           )}
 
+          {/* === AUSFÜHRUNG === */}
+          <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
+            <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>⚡ Ausführung</span>
+          </div>
           <div className="oc-add-row">
             <select 
               className="oc-input oc-select" 
@@ -2148,7 +2156,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             </div>
           )}
 
-          {/* Auto-Cleanup Rules */}
+          {/* === OPTIONEN === */}
+          <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
+            <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>⚙️ Optionen</span>
+          </div>
           <div className="oc-add-row" style={{ padding: '12px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '8px', flexDirection: 'column', alignItems: 'flex-start' }}>
             <label className="oc-checkbox-label">
               <input 
@@ -2199,6 +2210,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             )}
           </div>
 
+          {/* === AUFGABE === */}
+          <div style={{ borderTop: "1px solid var(--bg3)", margin: "12px 0 8px", paddingTop: "12px" }}>
+            <span style={{ fontSize: "11px", color: "var(--txd)", textTransform: "uppercase", letterSpacing: "0.5px" }}>📝 Aufgabe</span>
+          </div>
           <textarea 
             className="oc-input oc-textarea" 
             placeholder={form.payloadKind === "systemEvent" ? "Event Text (wird in Main Session injiziert)" : "Agent Prompt (wird in isolierter Session ausgeführt)"} 
