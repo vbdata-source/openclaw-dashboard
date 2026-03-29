@@ -1597,6 +1597,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const [showRunsFor, setShowRunsFor] = useState<string | null>(null);
   const [jobRuns, setJobRuns] = useState<any[]>([]);
   const [filter, setFilter] = useState<"active" | "disabled" | "all">("active");
+  const [showInfoFor, setShowInfoFor] = useState<string | null>(null);
   
   // Helper: convert ms to value + unit
   const msToInterval = (ms: number): { value: number; unit: string } => {
@@ -2712,6 +2713,225 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         </div>
       )}
 
+      {/* Info-Modal für Job-Details */}
+      {showInfoFor && (() => {
+        const job = cronJobs.find(j => j.id === showInfoFor);
+        if (!job) return null;
+        
+        const fullText = job.payload.text || job.payload.message || "";
+        
+        // Script-Namen aus dem Text extrahieren
+        const scriptMatches = fullText.match(/node\s+scripts\/([a-zA-Z0-9_-]+\.js)/g) || [];
+        const scripts = scriptMatches.map(m => m.replace('node scripts/', ''));
+        
+        // Script-Beschreibungen
+        const SCRIPT_DOCS: Record<string, { title: string; desc: string }> = {
+          "daily-mail-summary.js": {
+            title: "📧 Tägliche Mail-Zusammenfassung",
+            desc: "Verbindet sich mit Microsoft 365, holt ungelesene Mails der letzten 24h, filtert nach JET/JIRA-relevanten Absendern und erstellt eine priorisierte Zusammenfassung."
+          },
+          "onedrive-sync-cron.js": {
+            title: "☁️ OneDrive Sync",
+            desc: "Scannt den JET-Ordner in OneDrive auf neue/geänderte PDF-Dateien und importiert sie automatisch in den Graphiti Knowledge Graph."
+          },
+          "synapse-decay.js": {
+            title: "🧠 Synapse Decay",
+            desc: "Lässt ungenutzte Verbindungen im assoziativen Gedächtnis verblassen (Hebbian Learning: 'use it or lose it'). Verbindungen unter dem Threshold werden entfernt."
+          },
+          "ki-memory.js": {
+            title: "🔗 KI-Gedächtnis Sync",
+            desc: "Schnittstelle zum geteilten KI-Gedächtnis - synchronisiert Wissen zwischen AJBot und ChatGPT."
+          },
+          "reindex-watchdog.js": {
+            title: "👀 Reindex Watchdog",
+            desc: "Überwacht laufende Import-Prozesse, prüft Fortschritt und meldet Stillstand oder Fehler."
+          },
+          "graphiti-query.js": {
+            title: "🔍 Graphiti Query",
+            desc: "CLI für Knowledge Graph Abfragen - semantische Suche und Entity-Lookup."
+          },
+        };
+        
+        return (
+          <div 
+            className="oc-modal-overlay" 
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: "20px"
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowInfoFor(null);
+            }}
+          >
+            <div className="oc-add-panel" style={{ 
+              maxHeight: "85vh", 
+              overflowY: "auto", 
+              maxWidth: "700px", 
+              width: "100%", 
+              margin: 0 
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h3 style={{ margin: 0, fontSize: "18px" }}>
+                  ℹ️ {job.name || `Job ${job.id.slice(0, 8)}`}
+                </h3>
+                <button className="oc-btn-ghost" onClick={() => setShowInfoFor(null)}>✕</button>
+              </div>
+
+              {/* Zeitplan */}
+              <div style={{ 
+                padding: "12px", 
+                backgroundColor: "var(--bg2)", 
+                borderRadius: "8px", 
+                marginBottom: "12px" 
+              }}>
+                <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>⏰ Zeitplan</div>
+                <div style={{ fontSize: "14px", fontWeight: 500 }}>{describeSchedule(job.schedule)}</div>
+                {job.schedule.tz && (
+                  <div style={{ fontSize: "11px", color: "var(--txd)", marginTop: "4px" }}>
+                    Zeitzone: {job.schedule.tz}
+                  </div>
+                )}
+              </div>
+
+              {/* Session Target */}
+              <div style={{ 
+                padding: "12px", 
+                backgroundColor: "var(--bg2)", 
+                borderRadius: "8px", 
+                marginBottom: "12px",
+                display: "flex",
+                gap: "16px"
+              }}>
+                <div>
+                  <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>🎯 Session</div>
+                  <div style={{ fontSize: "14px" }}>
+                    {job.sessionTarget === "main" ? "💬 Main Session" : "🤖 Isolierte Session"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>📨 Payload Typ</div>
+                  <div style={{ fontSize: "14px" }}>
+                    {job.payload.kind === "systemEvent" ? "System Event" : "Agent Turn"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Verwendete Scripts */}
+              {scripts.length > 0 && (
+                <div style={{ 
+                  padding: "12px", 
+                  backgroundColor: "rgba(139, 92, 246, 0.1)", 
+                  borderRadius: "8px", 
+                  marginBottom: "12px",
+                  border: "1px solid rgba(139, 92, 246, 0.3)"
+                }}>
+                  <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "8px" }}>🛠️ Verwendete Scripts</div>
+                  {scripts.map((script, idx) => {
+                    const doc = SCRIPT_DOCS[script];
+                    return (
+                      <div key={idx} style={{ 
+                        padding: "8px 12px", 
+                        backgroundColor: "var(--bg1)", 
+                        borderRadius: "6px",
+                        marginTop: idx > 0 ? "8px" : 0
+                      }}>
+                        <div style={{ fontWeight: 500, fontSize: "13px", color: "#8b5cf6" }}>
+                          {doc?.title || `📄 ${script}`}
+                        </div>
+                        <code style={{ fontSize: "11px", color: "var(--txd)" }}>scripts/{script}</code>
+                        {doc && (
+                          <div style={{ fontSize: "12px", marginTop: "6px", color: "var(--tx)", lineHeight: 1.4 }}>
+                            {doc.desc}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Vollständige Aufgabe */}
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "8px" }}>📝 Vollständige Aufgabe</div>
+                <div style={{ 
+                  padding: "12px", 
+                  backgroundColor: "var(--bg1)", 
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  lineHeight: 1.5,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: "300px",
+                  overflowY: "auto",
+                  fontFamily: "monospace"
+                }}>
+                  {fullText || "(Keine Aufgabe definiert)"}
+                </div>
+              </div>
+
+              {/* Letzte Ausführung */}
+              {job.state && (
+                <div style={{ 
+                  padding: "12px", 
+                  backgroundColor: "var(--bg2)", 
+                  borderRadius: "8px",
+                  display: "flex",
+                  gap: "16px",
+                  flexWrap: "wrap"
+                }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>🕐 Letzte Ausführung</div>
+                    <div style={{ fontSize: "13px" }}>
+                      {job.state.lastRunAtMs 
+                        ? new Date(job.state.lastRunAtMs).toLocaleString("de-AT")
+                        : "Noch nie"}
+                    </div>
+                  </div>
+                  {job.state.nextRunAtMs && (
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>⏭️ Nächste Ausführung</div>
+                      <div style={{ fontSize: "13px" }}>
+                        {new Date(job.state.nextRunAtMs).toLocaleString("de-AT")}
+                      </div>
+                    </div>
+                  )}
+                  {job.state.lastStatus && (
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--txd)", marginBottom: "4px" }}>📊 Status</div>
+                      <div style={{ 
+                        fontSize: "13px",
+                        color: job.state.lastStatus === "ok" ? "#22c55e" : "#ef4444"
+                      }}>
+                        {job.state.lastStatus === "ok" ? "✓ Erfolgreich" : "✗ Fehler"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Job ID */}
+              <div style={{ 
+                marginTop: "12px", 
+                fontSize: "11px", 
+                color: "var(--txd)",
+                fontFamily: "monospace"
+              }}>
+                ID: {job.id}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Job Liste */}
       <div className="oc-cron-list">
         {cronJobs.length === 0 && !cronLoading && (
@@ -2796,6 +3016,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               </button>
               <button className="oc-cron-btn" onClick={() => handleShowRuns(job.id)} title="Ausführungs-Log">
                 📋
+              </button>
+              <button className="oc-cron-btn" onClick={() => setShowInfoFor(job.id)} title="Details anzeigen">
+                ℹ️
               </button>
               <button className="oc-cron-btn oc-cron-btn--danger" onClick={() => handleDelete(job.id)} title="Löschen">
                 🗑️
