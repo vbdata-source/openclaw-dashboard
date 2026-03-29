@@ -2382,10 +2382,30 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 </span>
               </div>
             </div>
-            <div className="oc-cron-card-meta">
-              {job.lastRun && <span>Zuletzt: {new Date(job.lastRun).toLocaleString("de-AT")}</span>}
-              {job.nextRun && <span>Nächster: {new Date(job.nextRun).toLocaleString("de-AT")}</span>}
-              {job.runCount !== undefined && <span>Ausführungen: {job.runCount}</span>}
+            <div className="oc-cron-card-meta" style={{ 
+              display: "flex", 
+              gap: "16px", 
+              fontSize: "12px", 
+              color: "var(--txd)",
+              padding: "8px 0",
+              borderTop: "1px solid var(--bg2)",
+              marginTop: "8px"
+            }}>
+              <span title="Letzte Ausführung">
+                🕐 {job.lastRun 
+                  ? new Date(job.lastRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })
+                  : "Noch nie"}
+              </span>
+              {job.nextRun && (
+                <span title="Nächste Ausführung">
+                  ⏭️ {new Date(job.nextRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}
+                </span>
+              )}
+              {job.runCount !== undefined && (
+                <span title="Anzahl Ausführungen">
+                  🔢 {job.runCount}x
+                </span>
+              )}
             </div>
             <div className="oc-cron-card-actions">
               <button className="oc-cron-btn" onClick={() => openEditForm(job)} title="Bearbeiten">
