@@ -2126,9 +2126,34 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         <button className="oc-btn-primary" onClick={openAddForm}>+ Neuer Cron-Job</button>
       </div>
 
-      {/* Add/Edit Form */}
+      {/* Add/Edit Form - Modal Overlay */}
       {showForm && (
-        <div className="oc-add-panel oc-cron-form">
+        <div 
+          className="oc-modal-overlay" 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "20px"
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeForm();
+          }}
+        >
+        <div className="oc-add-panel oc-cron-form" style={{
+          maxHeight: "90vh",
+          overflowY: "auto",
+          maxWidth: "700px",
+          width: "100%",
+          margin: 0
+        }}>
           <h3 className="oc-form-title">{editingJob ? "✏️ Cron-Job bearbeiten" : "➕ Neuer Cron-Job"}</h3>
           
           {/* Name-Zeile */}
@@ -2581,11 +2606,31 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             <button className="oc-btn-ghost" onClick={closeForm}>Abbrechen</button>
           </div>
         </div>
+        </div>
       )}
 
-      {/* Run-History Panel */}
+      {/* Run-History Panel - Modal */}
       {showRunsFor && (
-        <div className="oc-add-panel" style={{ marginBottom: "16px" }}>
+        <div 
+          className="oc-modal-overlay" 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "20px"
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowRunsFor(null);
+          }}
+        >
+        <div className="oc-add-panel" style={{ maxHeight: "80vh", overflowY: "auto", maxWidth: "800px", width: "100%", margin: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 className="oc-form-title" style={{ margin: 0 }}>
               📋 Ausführungs-Log: {cronJobs.find(j => j.id === showRunsFor)?.name || showRunsFor.slice(0, 8)}
@@ -2652,6 +2697,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               </table>
             </div>
           )}
+        </div>
         </div>
       )}
 
