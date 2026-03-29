@@ -16,7 +16,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, statSync } from "fs";
 import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 import { jobStore, JobStatus } from "./jobStore.js";
@@ -938,7 +938,7 @@ api.get("/explorer/:dir", async (req, res) => {
         let modified = null;
         
         try {
-          const stats = require("fs").statSync(fullPath);
+          const stats = statSync(fullPath);
           size = stats.size;
           modified = stats.mtime.toISOString();
         } catch {}
@@ -988,7 +988,7 @@ api.get("/explorer/:dir/:subdir", async (req, res) => {
         let modified = null;
         
         try {
-          const stats = require("fs").statSync(fullPath);
+          const stats = statSync(fullPath);
           size = stats.size;
           modified = stats.mtime.toISOString();
         } catch {}
@@ -1043,7 +1043,7 @@ api.get("/explorer/:dir/file/*", async (req, res) => {
       }
       
       const content = readFileSync(fullPath, "utf-8");
-      const stats = require("fs").statSync(fullPath);
+      const stats = statSync(fullPath);
       
       return res.json({ 
         path: `${dir}/${filePath}`,
