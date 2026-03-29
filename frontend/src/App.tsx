@@ -1943,11 +1943,23 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       const parts = expr.split(" ");
       if (parts.length === 5) {
         const [min, hour, dom, mon, dow] = parts;
-        const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-        if (dom === "*" && mon === "*" && dow === "*") {
+        
+        // Check for hourly pattern: "0 * * * *" or "30 * * * *"
+        if (hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+          if (min === "0") return `🔄 Stündlich`;
+          if (min.match(/^\d+$/)) return `🔄 Stündlich um :${min.padStart(2, "0")}`;
+          return `🔄 ${min} Min jede Stunde`;
+        }
+        
+        // Only show as "daily" if hour is a specific number (not wildcard)
+        if (hour.match(/^\d+$/) && min.match(/^\d+$/) && dom === "*" && mon === "*" && dow === "*") {
+          const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
           return `☀️ Täglich um ${time}`;
         }
-        if (dom === "*" && mon === "*" && dow !== "*") {
+        
+        // Weekly pattern
+        if (hour.match(/^\d+$/) && min.match(/^\d+$/) && dom === "*" && mon === "*" && dow !== "*") {
+          const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
           const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
           const days = dow.split(",").map(d => dayNames[parseInt(d)] || d).join(", ");
           return `📆 ${days} um ${time}`;
