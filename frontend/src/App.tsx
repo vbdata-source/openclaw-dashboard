@@ -1596,6 +1596,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [showRunsFor, setShowRunsFor] = useState<string | null>(null);
   const [jobRuns, setJobRuns] = useState<any[]>([]);
+  const [filter, setFilter] = useState<"active" | "disabled" | "all">("active");
   
   // Helper: convert ms to value + unit
   const msToInterval = (ms: number): { value: number; unit: string } => {
@@ -2013,6 +2014,30 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     <div className="oc-cron">
       <div className="oc-section-header">
         <h2 className="oc-view-title">Cron Jobs {(cronLoading || loading) && <span className="oc-loading-sm">⏳</span>}</h2>
+        <div style={{ display: "flex", gap: "4px", marginLeft: "auto", marginRight: "16px" }}>
+          {(["active", "disabled", "all"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: filter === f ? 600 : 400,
+                background: filter === f ? "var(--accent)" : "var(--bg2)",
+                color: filter === f ? "#fff" : "var(--tx)",
+                transition: "all 0.15s"
+              }}
+            >
+              {f === "active" ? "✓ Aktive" : f === "disabled" ? "○ Deaktivierte" : "Alle"}
+              {f === "active" && ` (${cronJobs.filter(j => j.enabled).length})`}
+              {f === "disabled" && ` (${cronJobs.filter(j => !j.enabled).length})`}
+              {f === "all" && ` (${cronJobs.length})`}
+            </button>
+          ))}
+        </div>
         <button className="oc-btn-primary" onClick={openAddForm}>+ Neuer Cron-Job</button>
       </div>
 
@@ -2437,7 +2462,9 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         {cronJobs.length === 0 && !cronLoading && (
           <div className="oc-empty">Keine Cron-Jobs konfiguriert</div>
         )}
-        {cronJobs.map((job) => (
+        {cronJobs
+          .filter(job => filter === "all" ? true : filter === "active" ? job.enabled : !job.enabled)
+          .map((job) => (
           <div key={job.id} className={`oc-cron-card ${!job.enabled ? "oc-cron-card--disabled" : ""}`}>
             <div className="oc-cron-card-main">
               <div className="oc-cron-card-info">
