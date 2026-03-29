@@ -1727,19 +1727,18 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       enabled: form.enabled,
     };
     
-    // Store auto-cleanup rules in job metadata
-    if (form.autoDelete) {
-      jobData.autoCleanup = {
-        condition: form.deleteCondition,
-        pattern: form.deletePattern || undefined,
-        maxRuns: form.maxRuns || undefined,
-      };
-    }
+    // Auto-cleanup is stored locally in Dashboard, not sent to Gateway
+    // (Gateway doesn't support autoCleanup field)
+    const autoCleanupData = form.autoDelete ? {
+      condition: form.deleteCondition,
+      pattern: form.deletePattern || undefined,
+      maxRuns: form.maxRuns || undefined,
+    } : undefined;
 
     try {
       if (editingJob) {
-        // Update existing job
-        await request("cron.update", { jobId: editingJob.id, patch: jobData });
+        // Update existing job - use 'id' not 'jobId' for Gateway compatibility
+        await request("cron.update", { id: editingJob.id, patch: jobData });
         console.log("[Cron] Job aktualisiert:", editingJob.id);
       } else {
         // Create new job
@@ -1758,7 +1757,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   const handleDelete = async (id: string) => {
     if (!confirm("Cron-Job wirklich löschen?")) return;
     try {
-      await request("cron.remove", { jobId: id });
+      await request("cron.remove", { id });
       loadCronJobs();
     } catch (err: any) {
       console.error("[Cron] Löschen fehlgeschlagen:", err.message);
@@ -1768,7 +1767,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   // Job aktivieren/deaktivieren
   const handleToggle = async (job: CronJob) => {
     try {
-      await request("cron.update", { jobId: job.id, patch: { enabled: !job.enabled } });
+      await request("cron.update", { id: job.id, patch: { enabled: !job.enabled } });
       loadCronJobs();
     } catch (err: any) {
       console.error("[Cron] Toggle fehlgeschlagen:", err.message);
@@ -1782,7 +1781,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
 
     try {
       // Erst versuchen über cron.run
-      const result = await request("cron.run", { jobId: id });
+      const result = await request("cron.run", { id });
       
       // Wenn "not-due", dann einen neuen einmaligen Test-Job erstellen
       if (result?.ran === false && result?.reason === "not-due") {

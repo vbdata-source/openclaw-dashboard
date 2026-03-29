@@ -560,14 +560,9 @@ export function TemplatesView({ onJobCreated, gwRequest }: TemplatesViewProps) {
         enabled: true,
       };
       
-      // Auto-Cleanup Rules
+      // Auto-Cleanup Rules (stored locally, not sent to Gateway)
+      // Append instruction to the prompt for agent to self-delete
       if (config.autoDelete) {
-        jobData.autoCleanup = {
-          condition: config.deleteCondition,
-          pattern: config.deletePattern,
-          maxRuns: config.maxRuns,
-        };
-        // Also append instruction to the prompt for agent to self-delete
         if (config.deleteCondition === "contains" && config.deletePattern) {
           payload.message += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${config.deletePattern}" enthält, lösche diesen Cron-Job.]`;
         } else if (config.deleteCondition === "maxRuns" && config.maxRuns) {
