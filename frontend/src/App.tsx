@@ -1709,6 +1709,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       }
     }
     
+    // Strip AUTO-CLEANUP suffix from text when editing
+    let rawText = job.payload.text || job.payload.message || "";
+    rawText = rawText.replace(/\n\n\[AUTO-CLEANUP:.*?\]/gs, "").trim();
+    
     setForm({
       name: job.name || "",
       scheduleKind,
@@ -1721,7 +1725,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       atDateTime: job.schedule.atMs ? new Date(job.schedule.atMs).toISOString().slice(0, 16) : "",
       timezone: job.schedule.tz || "Europe/Vienna",
       payloadKind: job.payload.kind,
-      text: job.payload.text || job.payload.message || "",
+      text: rawText,
       sessionTarget: job.sessionTarget,
       enabled: job.enabled,
       deliver: job.payload.deliver || false,
@@ -2221,6 +2225,24 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
             onChange={(e) => setForm({ ...form, text: e.target.value })} 
             rows={3}
           />
+
+          {/* Auto-Cleanup Info-Hinweis (nur wenn aktiv) */}
+          {form.autoDelete && (
+            <div style={{ 
+              padding: "10px 12px", 
+              backgroundColor: "rgba(234, 179, 8, 0.15)", 
+              borderRadius: "6px", 
+              fontSize: "12px",
+              color: "var(--tx)",
+              border: "1px solid rgba(234, 179, 8, 0.3)"
+            }}>
+              <strong>ℹ️ Auto-Cleanup aktiv:</strong>{" "}
+              {form.deleteCondition === "contains" 
+                ? `Wenn die Ausgabe "${form.deletePattern || "..."}" enthält, wird der Job automatisch gelöscht.`
+                : `Nach ${form.maxRuns} Ausführungen wird der Job automatisch gelöscht.`
+              }
+            </div>
+          )}
 
           <div className="oc-add-row">
             <button className="oc-btn-primary" onClick={handleSubmit} disabled={!form.text.trim()}>
