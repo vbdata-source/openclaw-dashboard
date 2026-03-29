@@ -567,14 +567,18 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   {activeTab === "scripts" && selectedFile && (
                     <button
                       className="oc-btn-ghost"
-                      onClick={() => loadUsage(selectedFile)}
-                      title="Wo wird dieses Script verwendet?"
+                      onClick={() => {
+                        const question = `Wo wird das Script "${selectedFile}" verwendet? Bitte prüfe: Cron-Jobs, andere Scripts die es importieren, und ob du es manuell aufrufst. Ist es noch in Verwendung oder kann es gelöscht werden?`;
+                        navigator.clipboard.writeText(question);
+                        alert(`📋 Frage kopiert!\n\nFüge sie im Chat ein um AJBot zu fragen:\n\n"${question.slice(0, 80)}..."`);
+                      }}
+                      title="Frage in Zwischenablage kopieren und im Chat einfügen"
                       style={{
                         backgroundColor: "rgba(59, 130, 246, 0.1)",
                         borderColor: "rgba(59, 130, 246, 0.3)"
                       }}
                     >
-                      🔍 Wo verwendet?
+                      🤖 Agent fragen
                     </button>
                   )}
                   {currentExtension === "json" && (
