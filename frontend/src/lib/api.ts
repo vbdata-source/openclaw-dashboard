@@ -158,6 +158,31 @@ export const scripts = {
     }),
 };
 
+// ── Explorer (config/, data/, scripts/) ───────────────────
+export interface ExplorerFile {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+  modified: string | null;
+  extension: string | null;
+}
+
+export const explorer = {
+  list: (dir: string, subdir?: string) => {
+    const path = subdir ? `/explorer/${dir}/${subdir}` : `/explorer/${dir}`;
+    return request<{ files: ExplorerFile[]; path: string }>(path);
+  },
+  getFile: (dir: string, filePath: string) =>
+    request<{ path: string; content: string; size: number; modified: string }>(
+      `/explorer/${dir}/file/${filePath}`
+    ),
+  updateFile: (dir: string, filePath: string, content: string) =>
+    request(`/explorer/${dir}/file/${filePath}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+};
+
 // ── Cron Jobs ─────────────────────────────────────────────
 export const cron = {
   list: () => request("/cron"),
@@ -381,6 +406,7 @@ export const api = {
   memory,
   agents,
   scripts,
+  explorer,
   cron,
   events,
   approvals,

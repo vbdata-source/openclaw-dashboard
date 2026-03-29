@@ -787,6 +787,191 @@ api.put("/scripts/:filename", sensitiveLimiter, async (req, res) => {
   }
 });
 
+// ── Workspace Explorer (config/, data/, etc.) ────────────
+const ALLOWED_EXPLORER_DIRS = ["config", "data", "scripts"];
+const ALLOWED_EXTENSIONS = [".json", ".yaml", ".yml", ".js", ".md", ".txt", ".csv"];
+
+// List directory contents
+api.get("/explorer/:dir", async (req, res) => {
+  try {
+    const dir = basename(req.params.dir);
+    if (!ALLOWED_EXPLORER_DIRS.includes(dir)) {
+      return res.status(400).json({ error: "Verzeichnis nicht erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const targetDir = join(WORKSPACE_DIR, dir);
+      if (!existsSync(targetDir)) {
+        return res.json({ files: [], path: dir });
+      }
+      
+      const entries = readdirSync(targetDir, { withFileTypes: true });
+      const files = entries.map(entry => {
+        const fullPath = join(targetDir, entry.name);
+        let size = 0;
+        let modified = null;
+        
+        try {
+          const stats = require("fs").statSync(fullPath);
+          size = stats.size;
+          modified = stats.mtime.toISOString();
+        } catch {}
+        
+        return {
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+          size,
+          modified,
+          extension: entry.isDirectory() ? null : entry.name.split(".").pop()
+        };
+      }).sort((a, b) => {
+        // Directories first, then by name
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      return res.json({ files, path: dir });
+    }
+    
+    res.json({ files: [], path: dir, error: "Remote workspace not supported" });
+  } catch (err) {
+    res.status(502).json({ error: "Verzeichnis nicht lesbar", detail: err.message });
+  }
+});
+
+// List subdirectory contents
+api.get("/explorer/:dir/:subdir", async (req, res) => {
+  try {
+    const dir = basename(req.params.dir);
+    const subdir = basename(req.params.subdir);
+    if (!ALLOWED_EXPLORER_DIRS.includes(dir)) {
+      return res.status(400).json({ error: "Verzeichnis nicht erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const targetDir = join(WORKSPACE_DIR, dir, subdir);
+      if (!existsSync(targetDir)) {
+        return res.json({ files: [], path: `${dir}/${subdir}` });
+      }
+      
+      const entries = readdirSync(targetDir, { withFileTypes: true });
+      const files = entries.map(entry => {
+        const fullPath = join(targetDir, entry.name);
+        let size = 0;
+        let modified = null;
+        
+        try {
+          const stats = require("fs").statSync(fullPath);
+          size = stats.size;
+          modified = stats.mtime.toISOString();
+        } catch {}
+        
+        return {
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+          size,
+          modified,
+          extension: entry.isDirectory() ? null : entry.name.split(".").pop()
+        };
+      }).sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      return res.json({ files, path: `${dir}/${subdir}` });
+    }
+    
+    res.json({ files: [], path: `${dir}/${subdir}`, error: "Remote workspace not supported" });
+  } catch (err) {
+    res.status(502).json({ error: "Verzeichnis nicht lesbar", detail: err.message });
+  }
+});
+
+// Read file from explorer
+api.get("/explorer/:dir/file/*", async (req, res) => {
+  try {
+    const dir = basename(req.params.dir);
+    const filePath = req.params[0]; // Everything after /file/
+    
+    if (!ALLOWED_EXPLORER_DIRS.includes(dir)) {
+      return res.status(400).json({ error: "Verzeichnis nicht erlaubt" });
+    }
+    
+    const ext = "." + filePath.split(".").pop();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: "Dateityp nicht erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const fullPath = join(WORKSPACE_DIR, dir, filePath);
+      
+      // Security: Ensure path doesn't escape workspace
+      if (!fullPath.startsWith(join(WORKSPACE_DIR, dir))) {
+        return res.status(400).json({ error: "Ungültiger Pfad" });
+      }
+      
+      if (!existsSync(fullPath)) {
+        return res.status(404).json({ error: "Datei nicht gefunden" });
+      }
+      
+      const content = readFileSync(fullPath, "utf-8");
+      const stats = require("fs").statSync(fullPath);
+      
+      return res.json({ 
+        path: `${dir}/${filePath}`,
+        content,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      });
+    }
+    
+    res.status(502).json({ error: "Remote workspace not supported" });
+  } catch (err) {
+    res.status(502).json({ error: "Datei nicht lesbar", detail: err.message });
+  }
+});
+
+// Write file from explorer
+api.put("/explorer/:dir/file/*", sensitiveLimiter, async (req, res) => {
+  try {
+    const dir = basename(req.params.dir);
+    const filePath = req.params[0];
+    
+    if (!ALLOWED_EXPLORER_DIRS.includes(dir)) {
+      return res.status(400).json({ error: "Verzeichnis nicht erlaubt" });
+    }
+    
+    const ext = "." + filePath.split(".").pop();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: "Dateityp nicht erlaubt" });
+    }
+    
+    if (useLocalWorkspace) {
+      const fullPath = join(WORKSPACE_DIR, dir, filePath);
+      
+      // Security: Ensure path doesn't escape workspace
+      if (!fullPath.startsWith(join(WORKSPACE_DIR, dir))) {
+        return res.status(400).json({ error: "Ungültiger Pfad" });
+      }
+      
+      // Ensure parent directory exists
+      const parentDir = dirname(fullPath);
+      if (!existsSync(parentDir)) {
+        mkdirSync(parentDir, { recursive: true });
+      }
+      
+      writeFileSync(fullPath, req.body.content || "", "utf-8");
+      return res.json({ ok: true, path: `${dir}/${filePath}` });
+    }
+    
+    res.status(502).json({ error: "Remote workspace not supported" });
+  } catch (err) {
+    res.status(502).json({ error: "Datei nicht schreibbar", detail: err.message });
+  }
+});
+
 // ── Agent / Jobs ──────────────────────────────────────────
 api.get("/agents", async (req, res) => {
   try {

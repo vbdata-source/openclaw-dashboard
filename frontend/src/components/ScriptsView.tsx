@@ -1,9 +1,9 @@
 // ============================================================
-// ScriptsView — Auto-Scripts Editor
+// ScriptsView — Auto-Scripts & Config Explorer
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from "react";
-import api from "../lib/api";
+import api, { ExplorerFile } from "../lib/api";
 
 interface ScriptInfo {
   name: string;
@@ -17,9 +17,15 @@ interface ScriptsViewProps {
   onScriptChange?: () => void;
 }
 
+type TabType = "scripts" | "config" | "data";
+
 export function ScriptsView({ loading: initialLoading, highlightScript, onScriptChange }: ScriptsViewProps) {
+  const [activeTab, setActiveTab] = useState<TabType>("scripts");
   const [scripts, setScripts] = useState<ScriptInfo[]>([]);
-  const [selectedScript, setSelectedScript] = useState<string | null>(null);
+  const [explorerFiles, setExplorerFiles] = useState<ExplorerFile[]>([]);
+  const [currentPath, setCurrentPath] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedDir, setSelectedDir] = useState<string>("config");
   const [editContent, setEditContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fileInfo, setFileInfo] = useState<{ size: number; modified: string } | null>(null);
 
   // Scripts laden
   const loadScripts = useCallback(async () => {
@@ -43,15 +50,40 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
     }
   }, []);
 
+  // Explorer-Verzeichnis laden
+  const loadExplorerDir = useCallback(async (dir: string, subPath: string[] = []) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const subdir = subPath.length > 0 ? subPath.join("/") : undefined;
+      const res = await api.explorer.list(dir, subdir);
+      setExplorerFiles(res.files || []);
+      setSelectedDir(dir);
+      setCurrentPath(subPath);
+    } catch (err: any) {
+      setError(err.message || "Fehler beim Laden");
+      setExplorerFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load
   useEffect(() => {
-    loadScripts();
-  }, [loadScripts]);
+    if (activeTab === "scripts") {
+      loadScripts();
+    } else {
+      const dir = activeTab === "config" ? "config" : "data";
+      loadExplorerDir(dir);
+    }
+  }, [activeTab, loadScripts, loadExplorerDir]);
 
   // Highlight-Script automatisch öffnen
   useEffect(() => {
     if (highlightScript && scripts.length > 0) {
       const found = scripts.find(s => s.name === highlightScript);
       if (found) {
+        setActiveTab("scripts");
         openScript(highlightScript);
       }
     }
@@ -61,7 +93,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
   const openScript = async (filename: string) => {
     if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
     
-    setSelectedScript(filename);
+    setSelectedFile(filename);
     setDirty(false);
     setError(null);
     
@@ -69,6 +101,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
       const res = await api.scripts.get(filename);
       setEditContent(res.content);
       setOriginalContent(res.content);
+      setFileInfo(null);
     } catch (err: any) {
       setError(err.message || "Fehler beim Laden");
       setEditContent("");
@@ -76,20 +109,65 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
     }
   };
 
+  // Explorer-Datei öffnen
+  const openExplorerFile = async (file: ExplorerFile) => {
+    if (file.isDirectory) {
+      // Navigate into directory
+      loadExplorerDir(selectedDir, [...currentPath, file.name]);
+      return;
+    }
+    
+    if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    
+    const filePath = [...currentPath, file.name].join("/");
+    setSelectedFile(filePath);
+    setDirty(false);
+    setError(null);
+    
+    try {
+      const res = await api.explorer.getFile(selectedDir, filePath);
+      setEditContent(res.content);
+      setOriginalContent(res.content);
+      setFileInfo({ size: res.size, modified: res.modified });
+    } catch (err: any) {
+      setError(err.message || "Fehler beim Laden");
+      setEditContent("");
+      setOriginalContent("");
+    }
+  };
+
+  // Zurück navigieren
+  const navigateUp = () => {
+    if (currentPath.length > 0) {
+      const newPath = currentPath.slice(0, -1);
+      loadExplorerDir(selectedDir, newPath);
+      setSelectedFile(null);
+    }
+  };
+
   // Script speichern
-  const saveScript = async () => {
-    if (!selectedScript) return;
+  const saveFile = async () => {
+    if (!selectedFile) return;
     setSaving(true);
     setError(null);
     
     try {
-      await api.scripts.update(selectedScript, editContent);
+      if (activeTab === "scripts") {
+        await api.scripts.update(selectedFile, editContent);
+      } else {
+        await api.explorer.updateFile(selectedDir, selectedFile, editContent);
+      }
       setOriginalContent(editContent);
       setDirty(false);
       onScriptChange?.();
-      alert("✅ Gespeichert!");
+      // Reload file info
+      if (activeTab !== "scripts") {
+        const res = await api.explorer.getFile(selectedDir, selectedFile);
+        setFileInfo({ size: res.size, modified: res.modified });
+      }
     } catch (err: any) {
       setError(err.message || "Fehler beim Speichern");
+      alert("❌ Fehler: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -103,13 +181,17 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
     }
   };
 
-  // Filter Scripts
+  // Filter
   const filteredScripts = scripts.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.description || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Script-Kategorien (aus Präfix ableiten)
+  const filteredFiles = explorerFiles.filter(f =>
+    f.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Script-Kategorien
   const categorizeScript = (name: string): { category: string; icon: string; color: string } => {
     if (name.startsWith("synapse-")) return { category: "Synapse", icon: "🧠", color: "#8b5cf6" };
     if (name.startsWith("gap-") || name.startsWith("jetz-")) return { category: "JET", icon: "📊", color: "#f59e0b" };
@@ -121,20 +203,90 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
     return { category: "Utility", icon: "🔧", color: "#64748b" };
   };
 
-  const selectedInfo = selectedScript ? scripts.find(s => s.name === selectedScript) : null;
-  const selectedCategory = selectedScript ? categorizeScript(selectedScript) : null;
+  // File icon helper
+  const getFileIcon = (file: ExplorerFile): string => {
+    if (file.isDirectory) return "📁";
+    switch (file.extension) {
+      case "json": return "📋";
+      case "yaml": case "yml": return "⚙️";
+      case "js": return "📜";
+      case "md": return "📝";
+      case "csv": return "📊";
+      default: return "📄";
+    }
+  };
+
+  // Format file size
+  const formatSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Format JSON for display
+  const formatContent = (content: string, extension: string | null): string => {
+    if (extension === "json" && content.trim()) {
+      try {
+        return JSON.stringify(JSON.parse(content), null, 2);
+      } catch {
+        return content;
+      }
+    }
+    return content;
+  };
+
+  const selectedScriptInfo = activeTab === "scripts" && selectedFile 
+    ? scripts.find(s => s.name === selectedFile) 
+    : null;
+  const selectedCategory = selectedScriptInfo ? categorizeScript(selectedFile!) : null;
+
+  // Determine file extension for current file
+  const currentExtension = selectedFile ? selectedFile.split(".").pop() : null;
 
   return (
     <div className="oc-scripts">
       <div className="oc-section-header">
         <h2 className="oc-view-title">
-          Auto-Scripts {loading && <span className="oc-loading-sm">⏳</span>}
+          Workspace Explorer {loading && <span className="oc-loading-sm">⏳</span>}
         </h2>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "13px", color: "var(--txd)" }}>
-            {scripts.length} Scripts
-          </span>
-          <button className="oc-btn-ghost" onClick={loadScripts} title="Neu laden">
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "4px", marginRight: "12px" }}>
+            {([
+              { key: "scripts", label: "📜 Scripts", count: scripts.length },
+              { key: "config", label: "⚙️ Config", count: null },
+              { key: "data", label: "💾 Data", count: null },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+                  setActiveTab(tab.key);
+                  setSelectedFile(null);
+                  setDirty(false);
+                  setSearch("");
+                }}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: activeTab === tab.key ? 600 : 400,
+                  background: activeTab === tab.key ? "var(--accent)" : "var(--bg2)",
+                  color: activeTab === tab.key ? "#fff" : "var(--tx)",
+                  transition: "all 0.15s"
+                }}
+              >
+                {tab.label}
+                {tab.count !== null && <span style={{ marginLeft: "4px", opacity: 0.7 }}>({tab.count})</span>}
+              </button>
+            ))}
+          </div>
+          <button className="oc-btn-ghost" onClick={() => {
+            if (activeTab === "scripts") loadScripts();
+            else loadExplorerDir(selectedDir, currentPath);
+          }} title="Neu laden">
             🔄
           </button>
         </div>
@@ -159,24 +311,53 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
         gap: "16px",
         height: "calc(100vh - 180px)"
       }}>
-        {/* Script-Liste */}
+        {/* File List */}
         <div style={{
           display: "flex",
           flexDirection: "column",
           gap: "8px",
           overflow: "hidden"
         }}>
+          {/* Breadcrumb for explorer */}
+          {activeTab !== "scripts" && currentPath.length > 0 && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "8px",
+              backgroundColor: "var(--bg2)",
+              borderRadius: "6px",
+              fontSize: "12px"
+            }}>
+              <button
+                onClick={navigateUp}
+                style={{
+                  padding: "4px 8px",
+                  backgroundColor: "var(--bg3)",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  color: "var(--tx)"
+                }}
+              >
+                ⬆️ Zurück
+              </button>
+              <span style={{ color: "var(--txd)" }}>
+                {selectedDir}/{currentPath.join("/")}
+              </span>
+            </div>
+          )}
+
           {/* Suchfeld */}
           <input
             type="text"
             className="oc-input"
-            placeholder="🔍 Script suchen..."
+            placeholder="🔍 Suchen..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ marginBottom: "8px" }}
           />
 
-          {/* Script-Liste */}
+          {/* File List */}
           <div style={{
             flex: 1,
             overflowY: "auto",
@@ -184,71 +365,130 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
             flexDirection: "column",
             gap: "4px"
           }}>
-            {filteredScripts.length === 0 && !loading && (
-              <div style={{ color: "var(--txd)", padding: "20px", textAlign: "center" }}>
-                {search ? "Keine Scripts gefunden" : "Keine Scripts vorhanden"}
-              </div>
-            )}
-            {filteredScripts.map(script => {
-              const cat = categorizeScript(script.name);
-              const isSelected = selectedScript === script.name;
-              const isHighlighted = highlightScript === script.name;
-              return (
-                <div
-                  key={script.name}
-                  onClick={() => openScript(script.name)}
-                  style={{
-                    padding: "10px 12px",
-                    backgroundColor: isSelected 
-                      ? "var(--accent)" 
-                      : isHighlighted 
-                        ? "rgba(139, 92, 246, 0.2)" 
-                        : "var(--bg2)",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    borderLeft: `3px solid ${cat.color}`,
-                    transition: "all 0.15s"
-                  }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px"
-                  }}>
-                    <span>{cat.icon}</span>
-                    <span style={{
-                      fontSize: "13px",
-                      fontWeight: isSelected ? 600 : 400,
-                      color: isSelected ? "#fff" : "var(--tx)",
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap"
-                    }}>
-                      {script.name}
-                    </span>
-                    <span style={{
-                      fontSize: "11px",
-                      color: isSelected ? "rgba(255,255,255,0.7)" : "var(--txd)"
-                    }}>
-                      {(script.size / 1024).toFixed(1)}k
-                    </span>
+            {activeTab === "scripts" ? (
+              // Scripts List
+              <>
+                {filteredScripts.length === 0 && !loading && (
+                  <div style={{ color: "var(--txd)", padding: "20px", textAlign: "center" }}>
+                    {search ? "Keine Scripts gefunden" : "Keine Scripts vorhanden"}
                   </div>
-                  {script.description && (
-                    <div style={{
-                      fontSize: "11px",
-                      color: isSelected ? "rgba(255,255,255,0.7)" : "var(--txd)",
-                      marginTop: "4px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap"
-                    }}>
-                      {script.description}
+                )}
+                {filteredScripts.map(script => {
+                  const cat = categorizeScript(script.name);
+                  const isSelected = selectedFile === script.name;
+                  const isHighlighted = highlightScript === script.name;
+                  return (
+                    <div
+                      key={script.name}
+                      onClick={() => openScript(script.name)}
+                      style={{
+                        padding: "10px 12px",
+                        backgroundColor: isSelected 
+                          ? "var(--accent)" 
+                          : isHighlighted 
+                            ? "rgba(139, 92, 246, 0.2)" 
+                            : "var(--bg2)",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        borderLeft: `3px solid ${cat.color}`,
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>{cat.icon}</span>
+                        <span style={{
+                          fontSize: "13px",
+                          fontWeight: isSelected ? 600 : 400,
+                          color: isSelected ? "#fff" : "var(--tx)",
+                          flex: 1,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}>
+                          {script.name}
+                        </span>
+                        <span style={{
+                          fontSize: "11px",
+                          color: isSelected ? "rgba(255,255,255,0.7)" : "var(--txd)"
+                        }}>
+                          {formatSize(script.size)}
+                        </span>
+                      </div>
+                      {script.description && (
+                        <div style={{
+                          fontSize: "11px",
+                          color: isSelected ? "rgba(255,255,255,0.7)" : "var(--txd)",
+                          marginTop: "4px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}>
+                          {script.description}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </>
+            ) : (
+              // Explorer List
+              <>
+                {filteredFiles.length === 0 && !loading && (
+                  <div style={{ color: "var(--txd)", padding: "20px", textAlign: "center" }}>
+                    {search ? "Keine Dateien gefunden" : "Verzeichnis leer"}
+                  </div>
+                )}
+                {filteredFiles.map(file => {
+                  const filePath = [...currentPath, file.name].join("/");
+                  const isSelected = selectedFile === filePath;
+                  return (
+                    <div
+                      key={file.name}
+                      onClick={() => openExplorerFile(file)}
+                      style={{
+                        padding: "10px 12px",
+                        backgroundColor: isSelected ? "var(--accent)" : "var(--bg2)",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>{getFileIcon(file)}</span>
+                        <span style={{
+                          fontSize: "13px",
+                          fontWeight: isSelected ? 600 : 400,
+                          color: isSelected ? "#fff" : "var(--tx)",
+                          flex: 1,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}>
+                          {file.name}
+                        </span>
+                        {!file.isDirectory && (
+                          <span style={{
+                            fontSize: "11px",
+                            color: isSelected ? "rgba(255,255,255,0.7)" : "var(--txd)"
+                          }}>
+                            {formatSize(file.size)}
+                          </span>
+                        )}
+                      </div>
+                      {file.modified && !file.isDirectory && (
+                        <div style={{
+                          fontSize: "10px",
+                          color: isSelected ? "rgba(255,255,255,0.6)" : "var(--txd)",
+                          marginTop: "2px"
+                        }}>
+                          {new Date(file.modified).toLocaleString("de-AT")}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </div>
         </div>
 
@@ -260,7 +500,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
           borderRadius: "12px",
           overflow: "hidden"
         }}>
-          {selectedScript ? (
+          {selectedFile ? (
             <>
               {/* Editor Header */}
               <div style={{
@@ -272,16 +512,30 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                 justifyContent: "space-between"
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{
-                    padding: "4px 8px",
-                    backgroundColor: selectedCategory?.color + "22",
-                    color: selectedCategory?.color,
-                    borderRadius: "6px",
-                    fontSize: "12px"
-                  }}>
-                    {selectedCategory?.icon} {selectedCategory?.category}
+                  {activeTab === "scripts" && selectedCategory && (
+                    <span style={{
+                      padding: "4px 8px",
+                      backgroundColor: selectedCategory.color + "22",
+                      color: selectedCategory.color,
+                      borderRadius: "6px",
+                      fontSize: "12px"
+                    }}>
+                      {selectedCategory.icon} {selectedCategory.category}
+                    </span>
+                  )}
+                  {activeTab !== "scripts" && (
+                    <span style={{
+                      padding: "4px 8px",
+                      backgroundColor: "var(--bg3)",
+                      borderRadius: "6px",
+                      fontSize: "12px"
+                    }}>
+                      {selectedDir}/{selectedFile}
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 500 }}>
+                    {activeTab === "scripts" ? selectedFile : selectedFile.split("/").pop()}
                   </span>
-                  <span style={{ fontWeight: 500 }}>{selectedScript}</span>
                   {dirty && (
                     <span style={{
                       width: "8px",
@@ -292,6 +546,23 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   )}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
+                  {currentExtension === "json" && (
+                    <button
+                      className="oc-btn-ghost"
+                      onClick={() => {
+                        try {
+                          const formatted = JSON.stringify(JSON.parse(editContent), null, 2);
+                          setEditContent(formatted);
+                          setDirty(formatted !== originalContent);
+                        } catch {
+                          alert("❌ Ungültiges JSON");
+                        }
+                      }}
+                      title="JSON formatieren"
+                    >
+                      🎨 Format
+                    </button>
+                  )}
                   {dirty && (
                     <button
                       className="oc-btn-ghost"
@@ -303,7 +574,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   )}
                   <button
                     className="oc-btn-primary"
-                    onClick={saveScript}
+                    onClick={saveFile}
                     disabled={saving || !dirty}
                   >
                     {saving ? "⏳ Speichern..." : "💾 Speichern"}
@@ -312,7 +583,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
               </div>
 
               {/* Script Info */}
-              {selectedInfo?.description && (
+              {selectedScriptInfo?.description && (
                 <div style={{
                   padding: "8px 16px",
                   backgroundColor: "rgba(139, 92, 246, 0.1)",
@@ -320,7 +591,7 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                   fontSize: "12px",
                   color: "var(--tx)"
                 }}>
-                  📝 {selectedInfo.description}
+                  📝 {selectedScriptInfo.description}
                 </div>
               )}
 
@@ -357,7 +628,10 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                 justifyContent: "space-between"
               }}>
                 <span>{editContent.split("\n").length} Zeilen</span>
-                <span>{(editContent.length / 1024).toFixed(1)} KB</span>
+                <span>
+                  {formatSize(editContent.length)}
+                  {fileInfo?.modified && ` • Geändert: ${new Date(fileInfo.modified).toLocaleString("de-AT")}`}
+                </span>
               </div>
             </>
           ) : (
@@ -369,10 +643,20 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
               justifyContent: "center",
               color: "var(--txd)"
             }}>
-              <span style={{ fontSize: "48px", marginBottom: "16px" }}>📜</span>
-              <p>Wähle ein Script zum Bearbeiten</p>
-              <p style={{ fontSize: "12px", marginTop: "8px" }}>
-                Scripts werden von AJBot automatisch erstellt und können hier angepasst werden.
+              <span style={{ fontSize: "48px", marginBottom: "16px" }}>
+                {activeTab === "scripts" ? "📜" : activeTab === "config" ? "⚙️" : "💾"}
+              </span>
+              <p>
+                {activeTab === "scripts" 
+                  ? "Wähle ein Script zum Bearbeiten" 
+                  : "Wähle eine Datei zum Bearbeiten"}
+              </p>
+              <p style={{ fontSize: "12px", marginTop: "8px", maxWidth: "300px", textAlign: "center" }}>
+                {activeTab === "scripts" 
+                  ? "Scripts werden von AJBot automatisch erstellt und können hier angepasst werden."
+                  : activeTab === "config"
+                    ? "Konfigurationsdateien für Scripts und Integrationen."
+                    : "Datendateien wie Sync-Status, Caches und temporäre Daten."}
               </p>
             </div>
           )}
