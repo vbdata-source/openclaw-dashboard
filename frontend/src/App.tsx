@@ -1907,7 +1907,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
           actionText = form.stallCustomAction || "Melde Stillstand";
           break;
       }
-      messageText += `\n\n[STALL-DETECTION: Bei ${form.stallThreshold} gleichen Ergebnissen: ${actionText}. Prüfe mit cron.runs ob die letzten ${form.stallThreshold} Ausgaben identisch sind. Falls ja, führe die Aktion aus.]`;
+      messageText += `\n\n[STALL-DETECTION: Bei ${form.stallThreshold}x keinem Fortschritt: ${actionText}. Prüfe mit cron.runs die letzten ${form.stallThreshold} Ergebnisse. Vergleiche SEMANTISCH (nicht exakt): Ist der Kern-Inhalt gleich? Hat sich der Fortschritt/Status geändert? Ignoriere kleine Formulierungsunterschiede. Falls kein echter Fortschritt erkennbar → führe die Aktion aus.]`;
     }
     
     // Build message with auto-cleanup instruction if enabled
@@ -2476,7 +2476,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                     max={10}
                     style={{ width: '60px', textAlign: 'center' }}
                   />
-                  <span style={{ color: 'var(--txd)', fontSize: '13px' }}>gleichen Ergebnissen:</span>
+                  <span style={{ color: 'var(--txd)', fontSize: '13px' }}>Ausführungen ohne Fortschritt:</span>
                 </div>
                 <select 
                   className="oc-input oc-select" 
@@ -2500,7 +2500,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                   />
                 )}
                 <div style={{ fontSize: '11px', color: 'var(--txd)', marginTop: '4px' }}>
-                  💡 Agent vergleicht letzte Ergebnisse via cron.runs - bei Stillstand greift er automatisch ein.
+                  💡 Agent vergleicht letzte Ergebnisse <strong>semantisch</strong> (nicht exakt) - erkennt fehlenden Fortschritt trotz unterschiedlicher Formulierung.
                 </div>
               </div>
             )}
@@ -2542,7 +2542,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                   color: "var(--tx)",
                   border: "1px solid rgba(59, 130, 246, 0.3)"
                 }}>
-                  <strong>🔄 Stillstand-Erkennung aktiv:</strong> Bei {form.stallThreshold}x gleichem Ergebnis → {
+                  <strong>🔄 Stillstand-Erkennung aktiv:</strong> Bei {form.stallThreshold}x ohne Fortschritt → {
                     form.stallAction === "watchdog" ? "Watchdog ausführen" :
                     form.stallAction === "restart" ? "Prozess neu starten" :
                     form.stallAction === "alert" ? "Alarm senden" :
