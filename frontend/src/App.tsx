@@ -2662,6 +2662,12 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
         )}
         {cronJobs
           .filter(job => filter === "all" ? true : filter === "active" ? job.enabled : !job.enabled)
+          .sort((a, b) => {
+            // Sort by next run time (soonest first)
+            const aNext = a.state?.nextRunAtMs || Infinity;
+            const bNext = b.state?.nextRunAtMs || Infinity;
+            return aNext - bNext;
+          })
           .map((job) => (
           <div key={job.id} className={`oc-cron-card ${!job.enabled ? "oc-cron-card--disabled" : ""}`}>
             <div className="oc-cron-card-main">
