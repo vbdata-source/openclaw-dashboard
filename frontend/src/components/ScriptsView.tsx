@@ -569,7 +569,15 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                     <button
                       className="oc-btn-ghost"
                       onClick={() => {
-                        const question = `Wo wird das Script "${selectedFile}" verwendet? Bitte prüfe: Cron-Jobs, andere Scripts die es importieren, und ob du es manuell aufrufst. Falls es nicht mehr verwendet wird, frag ob ich es archivieren soll (nach scripts/_archived/ verschieben, NICHT löschen).`;
+                        const question = `Analysiere das Script "${selectedFile}":
+
+1. **Automatische Nutzung:** Cron-Jobs, andere Scripts die es importieren
+2. **On-Demand Tool:** Ist es ein Utility-Script das bei bestimmten Aufgaben aufgerufen werden SOLLTE? (z.B. Dokumente erstellen, Reports generieren, Daten verarbeiten)
+3. **Dokumentation:** Ist es in TOOLS.md oder scripts-documentation.md beschrieben?
+
+WICHTIG: Nur weil ein Script nicht automatisch läuft, heißt das NICHT dass es ungenutzt ist! Viele Scripts sind wertvolle On-Demand Tools.
+
+Falls es wirklich obsolet ist UND kein On-Demand Nutzen erkennbar → frag ob archivieren.`;
                         onAskAgent(question);
                       }}
                       title="Agent im Chat fragen"
