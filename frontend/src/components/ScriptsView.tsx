@@ -715,20 +715,22 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
           }}
         >
           <div style={{
-            backgroundColor: "var(--bg1)",
+            backgroundColor: "#1e1e2e",
             borderRadius: "12px",
             maxWidth: "600px",
             width: "100%",
             maxHeight: "80vh",
             overflow: "hidden",
             display: "flex",
-            flexDirection: "column"
+            flexDirection: "column",
+            border: "1px solid #3b3b4f",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
           }}>
             {/* Header */}
             <div style={{
               padding: "16px 20px",
-              backgroundColor: "var(--bg2)",
-              borderBottom: "1px solid var(--bg3)",
+              backgroundColor: "#2a2a3e",
+              borderBottom: "1px solid #3b3b4f",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center"
@@ -799,13 +801,21 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                       </span>
                     </h4>
                     {usageData.cronJobs.length === 0 ? (
-                      <div style={{ fontSize: "12px", color: "var(--txd)", padding: "8px", backgroundColor: "var(--bg2)", borderRadius: "6px" }}>
+                      <div style={{ fontSize: "12px", padding: "10px", backgroundColor: "#2a2a3e", borderRadius: "6px" }}>
                         {usageData.cronError ? (
-                          <span style={{ color: "#ef4444" }}>
-                            ⚠️ Cron-Suche fehlgeschlagen: {usageData.cronError}
-                          </span>
+                          <div>
+                            <div style={{ color: "#ef4444", marginBottom: "6px" }}>
+                              ⚠️ Gateway nicht erreichbar
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#888" }}>
+                              {usageData.cronError}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#666", marginTop: "6px" }}>
+                              Tipp: OPENCLAW_GATEWAY_HTTP in Coolify konfigurieren
+                            </div>
+                          </div>
                         ) : (
-                          "Nicht in Cron Jobs verwendet"
+                          <span style={{ color: "#888" }}>Nicht in Cron Jobs verwendet</span>
                         )}
                       </div>
                     ) : (
