@@ -1607,6 +1607,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     enabled: true,
     deliver: false,
     deliverChannel: "telegram",
+    // Auto-Cleanup Rules
+    autoDelete: false,
+    deleteCondition: "contains" as "contains" | "maxRuns",
+    deletePattern: "",
+    maxRuns: 10,
   });
 
   // Form für neuen Job öffnen
@@ -1625,6 +1630,10 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       enabled: true,
       deliver: true,
       deliverChannel: "telegram",
+      autoDelete: false,
+      deleteCondition: "contains",
+      deletePattern: "",
+      maxRuns: 10,
     });
     setShowForm(true);
   };
@@ -1686,21 +1695,40 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
 
+    // Build message with auto-cleanup instruction if enabled
+    let messageText = form.text;
+    if (form.autoDelete) {
+      if (form.deleteCondition === "contains" && form.deletePattern) {
+        messageText += `\n\n[AUTO-CLEANUP: Falls die Ausgabe "${form.deletePattern}" enthält, lösche diesen Cron-Job mit: cron action=remove jobId=<deine-job-id>]`;
+      } else if (form.deleteCondition === "maxRuns" && form.maxRuns) {
+        messageText += `\n\n[AUTO-CLEANUP: Dieser Job soll nach ${form.maxRuns} Ausführungen gelöscht werden.]`;
+      }
+    }
+
     const payload = form.payloadKind === "systemEvent" 
-      ? { kind: "systemEvent" as const, text: form.text }
+      ? { kind: "systemEvent" as const, text: messageText }
       : { 
           kind: "agentTurn" as const, 
-          message: form.text,
+          message: messageText,
           ...(form.deliver && { deliver: true, channel: form.deliverChannel }),
         };
 
-    const jobData = {
+    const jobData: any = {
       name: form.name || undefined,
       schedule,
       payload,
       sessionTarget: form.payloadKind === "systemEvent" ? "main" as const : "isolated" as const,
       enabled: form.enabled,
     };
+    
+    // Store auto-cleanup rules in job metadata
+    if (form.autoDelete) {
+      jobData.autoCleanup = {
+        condition: form.deleteCondition,
+        pattern: form.deletePattern || undefined,
+        maxRuns: form.maxRuns || undefined,
+      };
+    }
 
     try {
       if (editingJob) {
@@ -1941,6 +1969,57 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               )}
             </div>
           )}
+
+          {/* Auto-Cleanup Rules */}
+          <div className="oc-add-row" style={{ padding: '12px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '8px', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <label className="oc-checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={form.autoDelete} 
+                onChange={(e) => setForm({ ...form, autoDelete: e.target.checked })}
+              />
+              ⚡ Automatisch löschen wenn:
+            </label>
+            {form.autoDelete && (
+              <div style={{ marginTop: '8px', width: '100%' }}>
+                <select 
+                  className="oc-input oc-select" 
+                  value={form.deleteCondition} 
+                  onChange={(e) => setForm({ ...form, deleteCondition: e.target.value as "contains" | "maxRuns" })}
+                  style={{ width: '100%', marginBottom: '8px' }}
+                >
+                  <option value="contains">Ausgabe enthält Text...</option>
+                  <option value="maxRuns">Nach X Ausführungen</option>
+                </select>
+                
+                {form.deleteCondition === "contains" && (
+                  <input
+                    className="oc-input"
+                    type="text"
+                    value={form.deletePattern}
+                    onChange={(e) => setForm({ ...form, deletePattern: e.target.value })}
+                    placeholder="z.B. '100%' oder 'fertig' oder 'keine Änderung'"
+                    style={{ width: '100%' }}
+                  />
+                )}
+                
+                {form.deleteCondition === "maxRuns" && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      className="oc-input"
+                      type="number"
+                      value={form.maxRuns}
+                      onChange={(e) => setForm({ ...form, maxRuns: Number(e.target.value) })}
+                      min={1}
+                      max={1000}
+                      style={{ width: '80px' }}
+                    />
+                    <span>Ausführungen</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <textarea 
             className="oc-input oc-textarea" 
