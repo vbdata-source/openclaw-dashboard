@@ -1771,11 +1771,15 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let pauseCondition: "agent" | "time" = "agent";
     let pausePattern = "";
     
-    const pauseMatch = rawText.match(/\[AUTO-PAUSE: Überspringe Ausführung wenn: "([^"]*)"\./);
-    if (pauseMatch) {
+    // Match AUTO-PAUSE - look for the tag anywhere in the text
+    const hasPause = rawText.includes("[AUTO-PAUSE:");
+    if (hasPause) {
       autoPause = true;
       pauseCondition = "agent";
-      pausePattern = pauseMatch[1];
+      const pausePatternMatch = rawText.match(/Überspringe Ausführung wenn: "([^"]*)"/);
+      if (pausePatternMatch) {
+        pausePattern = pausePatternMatch[1];
+      }
     }
     
     // Parse STALL-DETECTION
@@ -1784,19 +1788,20 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     let stallAction: "watchdog" | "restart" | "alert" | "custom" = "watchdog";
     let stallCustomAction = "";
     
-    // Match both old format "gleichen Ergebnissen" and new "keinem Fortschritt"
-    const stallMatch = rawText.match(/\[STALL-DETECTION: Bei (\d+)x? (?:gleichen Ergebnissen|keinem Fortschritt): ([^.]+)/);
-    if (stallMatch) {
+    // Match STALL-DETECTION - look for the tag anywhere in the text
+    const hasStallDetection = rawText.includes("[STALL-DETECTION:");
+    if (hasStallDetection) {
       detectStall = true;
-      stallThreshold = parseInt(stallMatch[1]);
-      const actionText = stallMatch[2];
-      if (actionText.includes("Watchdog") || actionText.includes("watchdog")) stallAction = "watchdog";
-      else if (actionText.includes("Neustart") || actionText.includes("neu starten")) stallAction = "restart";
-      else if (actionText.includes("Alarm") || actionText.includes("alarm")) stallAction = "alert";
-      else {
-        stallAction = "custom";
-        stallCustomAction = actionText.trim();
+      // Try to extract threshold
+      const thresholdMatch = rawText.match(/Bei (\d+)x?/);
+      if (thresholdMatch) {
+        stallThreshold = parseInt(thresholdMatch[1]);
       }
+      // Determine action type
+      if (rawText.includes("Watchdog") || rawText.includes("watchdog")) stallAction = "watchdog";
+      else if (rawText.includes("Neustart") || rawText.includes("neu starten")) stallAction = "restart";
+      else if (rawText.includes("Alarm") || rawText.includes("alarm")) stallAction = "alert";
+      else stallAction = "custom";
     }
     
     // Strip AUTO-CLEANUP, AUTO-PAUSE and STALL-DETECTION suffix from text for editing
