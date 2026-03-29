@@ -1616,10 +1616,13 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   
   const [form, setForm] = useState({
     name: "",
-    scheduleKind: "cron" as "at" | "every" | "cron",
+    scheduleKind: "every" as "at" | "every" | "daily" | "weekly" | "cron",
     cronExpr: "0 9 * * 1", // Montag 9:00
     intervalValue: 1,
     intervalUnit: "hours" as "seconds" | "minutes" | "hours" | "days",
+    dailyTime: "09:00",
+    weeklyTime: "09:00",
+    weeklyDays: [1] as number[], // 0=So, 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa
     atDateTime: "",
     timezone: "Europe/Vienna",
     payloadKind: "systemEvent" as "systemEvent" | "agentTurn",
@@ -1640,10 +1643,13 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     setEditingJob(null);
     setForm({
       name: "",
-      scheduleKind: "cron",
+      scheduleKind: "every",
       cronExpr: "0 9 * * 1",
       intervalValue: 1,
       intervalUnit: "hours",
+      dailyTime: "09:00",
+      weeklyTime: "09:00",
+      weeklyDays: [1],
       atDateTime: "",
       timezone: "Europe/Vienna",
       payloadKind: "agentTurn",
@@ -1660,17 +1666,58 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
     setShowForm(true);
   };
 
+  // Helper: Parse cron expression to detect daily/weekly patterns
+  const parseCronExpr = (expr: string): { kind: "daily" | "weekly" | "cron"; time: string; days: number[] } => {
+    const parts = expr.split(" ");
+    if (parts.length !== 5) return { kind: "cron", time: "09:00", days: [1] };
+    const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
+    const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    
+    // Daily: "M H * * *"
+    if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
+      return { kind: "daily", time, days: [1] };
+    }
+    // Weekly: "M H * * D" or "M H * * D,D,D"
+    if (dayOfMonth === "*" && month === "*" && dayOfWeek !== "*") {
+      const days = dayOfWeek.split(",").map(d => parseInt(d)).filter(d => !isNaN(d));
+      return { kind: "weekly", time, days: days.length > 0 ? days : [1] };
+    }
+    return { kind: "cron", time: "09:00", days: [1] };
+  };
+
   // Form für Edit öffnen
   const openEditForm = (job: CronJob) => {
     setEditingJob(job);
     const autoCleanup = (job as any).autoCleanup;
     const interval = msToInterval(job.schedule.everyMs || 3600000);
+    
+    // Detect if cron expression is actually daily/weekly
+    let scheduleKind = job.schedule.kind as any;
+    let dailyTime = "09:00";
+    let weeklyTime = "09:00";
+    let weeklyDays = [1];
+    
+    if (job.schedule.kind === "cron" && job.schedule.expr) {
+      const parsed = parseCronExpr(job.schedule.expr);
+      if (parsed.kind === "daily") {
+        scheduleKind = "daily";
+        dailyTime = parsed.time;
+      } else if (parsed.kind === "weekly") {
+        scheduleKind = "weekly";
+        weeklyTime = parsed.time;
+        weeklyDays = parsed.days;
+      }
+    }
+    
     setForm({
       name: job.name || "",
-      scheduleKind: job.schedule.kind,
+      scheduleKind,
       cronExpr: job.schedule.expr || "0 9 * * 1",
       intervalValue: interval.value,
       intervalUnit: interval.unit as any,
+      dailyTime,
+      weeklyTime,
+      weeklyDays,
       atDateTime: job.schedule.atMs ? new Date(job.schedule.atMs).toISOString().slice(0, 16) : "",
       timezone: job.schedule.tz || "Europe/Vienna",
       payloadKind: job.payload.kind,
@@ -1721,6 +1768,15 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
       schedule = { kind: "cron", expr: form.cronExpr, tz: form.timezone };
     } else if (form.scheduleKind === "every") {
       schedule = { kind: "every", everyMs: intervalToMs(form.intervalValue, form.intervalUnit) };
+    } else if (form.scheduleKind === "daily") {
+      // Generate cron: "M H * * *"
+      const [hour, min] = form.dailyTime.split(":").map(Number);
+      schedule = { kind: "cron", expr: `${min} ${hour} * * *`, tz: form.timezone };
+    } else if (form.scheduleKind === "weekly") {
+      // Generate cron: "M H * * D,D,D"
+      const [hour, min] = form.weeklyTime.split(":").map(Number);
+      const days = form.weeklyDays.length > 0 ? form.weeklyDays.sort().join(",") : "1";
+      schedule = { kind: "cron", expr: `${min} ${hour} * * ${days}`, tz: form.timezone };
     } else {
       schedule = { kind: "at", atMs: new Date(form.atDateTime).getTime() };
     }
@@ -1841,7 +1897,22 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
   // Schedule-Beschreibung
   const describeSchedule = (schedule: CronJob["schedule"]): string => {
     if (schedule.kind === "cron") {
-      return `Cron: ${schedule.expr}${schedule.tz ? ` (${schedule.tz})` : ""}`;
+      // Try to display friendly format for daily/weekly patterns
+      const expr = schedule.expr || "";
+      const parts = expr.split(" ");
+      if (parts.length === 5) {
+        const [min, hour, dom, mon, dow] = parts;
+        const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+        if (dom === "*" && mon === "*" && dow === "*") {
+          return `☀️ Täglich um ${time}`;
+        }
+        if (dom === "*" && mon === "*" && dow !== "*") {
+          const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+          const days = dow.split(",").map(d => dayNames[parseInt(d)] || d).join(", ");
+          return `📆 ${days} um ${time}`;
+        }
+      }
+      return `⚙️ Cron: ${schedule.expr}${schedule.tz ? ` (${schedule.tz})` : ""}`;
     } else if (schedule.kind === "every") {
       const ms = schedule.everyMs || 0;
       if (ms >= 86400000) return `Alle ${Math.floor(ms / 86400000)} Tag(e)`;
@@ -1890,9 +1961,11 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               onChange={(e) => setForm({ ...form, scheduleKind: e.target.value as any })}
               style={{ width: 140 }}
             >
-              <option value="cron">⏰ Cron</option>
               <option value="every">🔄 Intervall</option>
+              <option value="daily">☀️ Täglich</option>
+              <option value="weekly">📆 Wöchentlich</option>
               <option value="at">📅 Einmalig</option>
+              <option value="cron">⚙️ Cron (Experte)</option>
             </select>
           </div>
 
@@ -1940,6 +2013,66 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 <option value="days">Tage</option>
               </select>
             </div>
+          )}
+
+          {form.scheduleKind === "daily" && (
+            <div className="oc-add-row" style={{ gap: "8px" }}>
+              <span style={{ color: "var(--txd)" }}>Täglich um</span>
+              <input 
+                type="time" 
+                className="oc-input" 
+                value={form.dailyTime} 
+                onChange={(e) => setForm({ ...form, dailyTime: e.target.value })}
+                style={{ width: "120px" }}
+              />
+              <span style={{ color: "var(--txd)" }}>Uhr</span>
+            </div>
+          )}
+
+          {form.scheduleKind === "weekly" && (
+            <>
+              <div className="oc-add-row" style={{ gap: "8px" }}>
+                <span style={{ color: "var(--txd)" }}>Wöchentlich um</span>
+                <input 
+                  type="time" 
+                  className="oc-input" 
+                  value={form.weeklyTime} 
+                  onChange={(e) => setForm({ ...form, weeklyTime: e.target.value })}
+                  style={{ width: "120px" }}
+                />
+                <span style={{ color: "var(--txd)" }}>Uhr</span>
+              </div>
+              <div className="oc-add-row" style={{ gap: "4px", flexWrap: "wrap" }}>
+                {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map((day, idx) => (
+                  <label 
+                    key={idx} 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "4px",
+                      padding: "4px 8px",
+                      background: form.weeklyDays.includes(idx) ? "var(--accent)" : "var(--bg2)",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      color: form.weeklyDays.includes(idx) ? "#fff" : "var(--tx)"
+                    }}
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={form.weeklyDays.includes(idx)}
+                      onChange={(e) => {
+                        const newDays = e.target.checked 
+                          ? [...form.weeklyDays, idx]
+                          : form.weeklyDays.filter(d => d !== idx);
+                        setForm({ ...form, weeklyDays: newDays.length > 0 ? newDays : [1] });
+                      }}
+                      style={{ display: "none" }}
+                    />
+                    {day}
+                  </label>
+                ))}
+              </div>
+            </>
           )}
 
           {form.scheduleKind === "at" && (
