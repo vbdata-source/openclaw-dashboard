@@ -899,16 +899,28 @@ export function ScriptsView({ loading: initialLoading, highlightScript, onScript
                     ) : (
                       usageData.memory.map((doc, i) => (
                         <div key={i} style={{
-                          padding: "8px 12px",
+                          padding: "10px 12px",
                           backgroundColor: "var(--bg2)",
                           borderRadius: "6px",
-                          marginTop: i > 0 ? "4px" : 0
+                          marginTop: i > 0 ? "6px" : 0
                         }}>
-                          <span style={{ fontSize: "13px" }}>📄 {doc.name}</span>
+                          <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: doc.match ? "8px" : 0 }}>
+                            📄 {doc.name}
+                          </div>
                           {doc.match && (
-                            <code style={{ fontSize: "10px", color: "var(--txd)", display: "block", marginTop: "2px" }}>
+                            <div style={{ 
+                              fontSize: "12px", 
+                              color: "var(--tx)", 
+                              backgroundColor: "var(--bg1)",
+                              padding: "8px 10px",
+                              borderRadius: "4px",
+                              borderLeft: "3px solid #8b5cf6",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                              lineHeight: 1.5
+                            }}>
                               ...{doc.match}...
-                            </code>
+                            </div>
                           )}
                         </div>
                       ))

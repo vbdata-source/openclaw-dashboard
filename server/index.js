@@ -814,7 +814,7 @@ api.get("/scripts/:filename/usage", async (req, res) => {
             name: job.name || job.id.slice(0, 8),
             enabled: job.enabled,
             schedule: job.schedule,
-            match: text.match(new RegExp(`.{0,30}${scriptName.replace(".", "\\.")}.{0,30}`))?.[0] || scriptName
+            match: text.match(new RegExp(`.{0,80}${scriptName.replace(".", "\\.")}.{0,80}`))?.[0] || scriptName
           });
         }
       }
@@ -862,7 +862,7 @@ api.get("/scripts/:filename/usage", async (req, res) => {
                 const relPath = dir === memoryDir ? file : `skills/${file}`;
                 results.memory.push({
                   name: relPath,
-                  match: content.match(new RegExp(`.{0,40}${scriptName.replace(".", "\\.")}.{0,40}`))?.[0] || scriptName
+                  match: content.match(new RegExp(`.{0,80}${scriptName.replace(".", "\\.")}.{0,80}`))?.[0] || scriptName
                 });
               }
             } catch {}
@@ -878,7 +878,7 @@ api.get("/scripts/:filename/usage", async (req, res) => {
           if (content.includes(scriptName) || content.includes(scriptName.replace(".js", ""))) {
             results.memory.push({
               name: file,
-              match: content.match(new RegExp(`.{0,40}${scriptName.replace(".", "\\.")}.{0,40}`))?.[0] || scriptName
+              match: content.match(new RegExp(`.{0,80}${scriptName.replace(".", "\\.")}.{0,80}`))?.[0] || scriptName
             });
           }
         } catch {}
