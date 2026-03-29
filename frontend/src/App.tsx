@@ -2382,32 +2382,38 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
                 </span>
               </div>
             </div>
-            <div className="oc-cron-card-meta" style={{ 
+            {/* Footer: Meta links, Actions rechts */}
+            <div style={{ 
               display: "flex", 
-              gap: "16px", 
-              fontSize: "12px", 
-              color: "var(--txd)",
-              padding: "8px 0",
+              justifyContent: "space-between", 
+              alignItems: "center",
               borderTop: "1px solid var(--bg2)",
-              marginTop: "8px"
+              marginTop: "8px",
+              paddingTop: "8px"
             }}>
-              <span title="Letzte Ausführung">
-                🕐 {job.lastRun 
-                  ? new Date(job.lastRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })
-                  : "Noch nie"}
-              </span>
-              {job.nextRun && (
-                <span title="Nächste Ausführung">
-                  ⏭️ {new Date(job.nextRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}
+              <div className="oc-cron-card-meta" style={{ 
+                display: "flex", 
+                gap: "12px", 
+                fontSize: "11px", 
+                color: "var(--txd)"
+              }}>
+                <span title="Letzte Ausführung">
+                  🕐 {job.lastRun 
+                    ? new Date(job.lastRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })
+                    : "Noch nie"}
                 </span>
-              )}
-              {job.runCount !== undefined && (
-                <span title="Anzahl Ausführungen">
-                  🔢 {job.runCount}x
-                </span>
-              )}
-            </div>
-            <div className="oc-cron-card-actions">
+                {job.nextRun && (
+                  <span title="Nächste Ausführung">
+                    ⏭️ {new Date(job.nextRun).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}
+                  </span>
+                )}
+                {job.runCount !== undefined && (
+                  <span title="Anzahl Ausführungen">
+                    🔢 {job.runCount}x
+                  </span>
+                )}
+              </div>
+              <div className="oc-cron-card-actions">
               <button className="oc-cron-btn" onClick={() => openEditForm(job)} title="Bearbeiten">
                 ✏️
               </button>
@@ -2423,6 +2429,7 @@ function CronManager({ request, loading }: { request: (method: string, params?: 
               <button className="oc-cron-btn oc-cron-btn--danger" onClick={() => handleDelete(job.id)} title="Löschen">
                 🗑️
               </button>
+              </div>
             </div>
           </div>
         ))}
